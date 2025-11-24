@@ -2,177 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    /* Maritime Ocean Theme - Deep Blues to Teals */
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
-    
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    
-    /* Primary: Deep Ocean Blue */
-    --primary: 210 100% 35%;
-    --primary-foreground: 0 0% 100%;
-    
-    /* Secondary: Teal/Sea Green */
-    --secondary: 180 60% 45%;
-    --secondary-foreground: 0 0% 100%;
-    
-    --muted: 210 20% 96%;
-    --muted-foreground: 215 16% 47%;
-    
-    --accent: 195 85% 55%;
-    --accent-foreground: 222 47% 11%;
-    
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 210 100% 50%;
-    
-    --radius: 0.75rem;
-    
-    /* Maritime Chart Colors */
-    --chart-1: 210 100% 45%;
-    --chart-2: 180 70% 50%;
-    --chart-3: 195 85% 55%;
-    --chart-4: 200 90% 60%;
-    --chart-5: 190 75% 48%;
-  }
-
-  .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 11%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 11%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 195 85% 55%;
-    --primary-foreground: 222 47% 11%;
-    --secondary: 180 60% 45%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 18%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 18%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 18%;
-    --input: 217 33% 18%;
-    --ring: 195 85% 55%;
-  }
+/* Modern Maritime SaaS Theme */
+:root {
+  --background: 210 60% 98%;
+  --foreground: 222 60% 10%;
+  --primary: 200 100% 40%; /* Deep ocean blue */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 180 80% 45%; /* Teal wave */
+  --secondary-foreground: 0 0% 100%;
+  --accent: 195 100% 60%; /* Aqua accent */
+  --accent-foreground: 222 60% 10%;
+  --muted: 210 30% 96%;
+  --muted-foreground: 215 20% 50%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 60% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 60% 10%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 210 30% 90%;
+  --input: 210 30% 90%;
+  --ring: 200 100% 50%;
+  --radius: 0.75rem;
+  --glass: rgba(255, 255, 255, 0.7);
+  --nav-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 50%, #14b8a6 100%);
+  --wave-pattern: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 10px,
+    rgba(59, 130, 246, 0.04) 10px,
+    rgba(59, 130, 246, 0.04) 20px
+  );
 }
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50 text-foreground;
-    background-attachment: fixed;
-  }
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(12px) saturate(1.2);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 32px 0 rgba(14, 165, 233, 0.08);
 }
 
-/* Maritime-inspired custom styles */
-@layer components {
-  .maritime-card {
-    @apply bg-white/80 backdrop-blur-sm rounded-xl shadow-lg border border-white/20;
-    @apply hover:shadow-xl transition-all duration-300;
-  }
-  
-  .maritime-gradient {
-    @apply bg-gradient-to-br from-blue-600 via-cyan-500 to-teal-400;
-  }
-  
-  .maritime-text-gradient {
-    @apply bg-gradient-to-r from-blue-600 to-teal-500 bg-clip-text text-transparent;
-  }
-  
-  .wave-pattern {
-    background-image: 
-      repeating-linear-gradient(
-        45deg,
-        transparent,
-        transparent 10px,
-        rgba(59, 130, 246, 0.03) 10px,
-        rgba(59, 130, 246, 0.03) 20px
-      );
-  }
-  
-  .ocean-shimmer {
-    @apply relative overflow-hidden;
-  }
-  
-  .ocean-shimmer::before {
-    content: '';
-    @apply absolute inset-0 -translate-x-full;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, 0.2),
-      transparent
-    );
-    animation: shimmer 3s infinite;
-  }
-  
-  @keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
-  }
-  
-  .maritime-button {
-    @apply bg-gradient-to-r from-blue-600 to-teal-500 text-white;
-    @apply hover:from-blue-700 hover:to-teal-600;
-    @apply shadow-lg hover:shadow-xl transition-all duration-300;
-    @apply font-semibold;
-  }
-  
-  .maritime-table {
-    @apply w-full border-collapse;
-  }
-  
-  .maritime-table thead {
-    @apply bg-gradient-to-r from-blue-600/10 to-teal-500/10;
-  }
-  
-  .maritime-table th {
-    @apply px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider;
-    @apply border-b border-gray-200;
-  }
-  
-  .maritime-table td {
-    @apply px-6 py-4 text-sm text-gray-900 border-b border-gray-100;
-  }
-  
-  .maritime-table tbody tr {
-    @apply hover:bg-blue-50/50 transition-colors;
-  }
+.maritime-nav {
+  background: var(--nav-gradient);
+  color: var(--primary-foreground);
+  box-shadow: 0 2px 16px 0 rgba(14, 165, 233, 0.1);
 }
 
-/* Smooth scrolling */
-html {
-  scroll-behavior: smooth;
+.wave-bg {
+  background: var(--wave-pattern);
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+.shimmer {
+  background: linear-gradient(90deg, #e0f2fe 25%, #bae6fd 50%, #e0f2fe 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
 }
 
-::-webkit-scrollbar-track {
-  @apply bg-gray-100;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-gradient-to-b from-blue-400 to-teal-400 rounded-full;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  @apply from-blue-500 to-teal-500;
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
