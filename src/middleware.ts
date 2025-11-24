@@ -16,8 +16,13 @@ export default withAuth(
       return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // Regular user routes - all authenticated users can access
-    if (path.startsWith("/voyages") || path.startsWith("/claims") || path.startsWith("/data")) {
+    // Data management routes (lookup data) - only for super admins and customer admins
+    if (path.startsWith("/data") && token?.role === "operator") {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
+
+    // Regular user routes - all authenticated users can access, but specific roles are handled above
+    if (path.startsWith("/voyages") || path.startsWith("/claims")) {
       if (!token) {
         return NextResponse.redirect(new URL("/auth/login", req.url));
       }

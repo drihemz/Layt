@@ -12,7 +12,11 @@ import { Session } from "next-auth";
  */
 export function getTenantClient(session: Session | null) {
   if (!session?.user?.tenantId) {
-    throw new Error("No tenant context available");
+    // For super_admin, tenantId can be null. We should handle this gracefully
+    // or ensure that getTenantClient is not called for super_admin specific views.
+    if (session?.user?.role !== 'super_admin') {
+      throw new Error("No tenant context available");
+    }
   }
 
   const tenantId = session.user.tenantId;
@@ -21,21 +25,23 @@ export function getTenantClient(session: Session | null) {
   return {
     // Voyages - tenant isolated
     voyages: {
-      list: async (limit = 30) => {
-        const query = supabase
+      list: async ({ search, page = 1, pageSize = 10 }: { search?: string; page?: number; pageSize?: number }) => {
+        let query = supabase
           .from("voyages")
           .select(`
-            *,
+            id, voyage_reference, vessel_id, voyage_number, created_at,
             vessels(name),
-            cargo_names(name),
-            owner_names(name),
-            charterer_names(name),
-            charter_parties(name),
-            users!voyages_created_by_fkey(full_name)
+            owner:owner_id(name),
+            charterer:charterer_id(name),
+            cargo_names(name)
           `)
           .eq("tenant_id", tenantId)
           .order("created_at", { ascending: false })
-          .limit(limit);
+          .range((page - 1) * pageSize, page * pageSize - 1);
+        
+        if (search) {
+          query = query.ilike("voyage_reference", `%${search}%`);
+        }
 
         return query;
       },
@@ -95,7 +101,7 @@ export function getTenantClient(session: Session | null) {
           .select(`
             *,
             voyages(voyage_reference, voyage_number),
-            counterparties(name),
+            counterparty:counterparty_id(name),
             ports(name),
             terms(name),
             cargo_names(name)
@@ -177,33 +183,13 @@ export function getTenantClient(session: Session | null) {
         if (error) throw error;
         return data;
       },
-      ownerNames: async () => {
+      parties: async () => {
         const { data, error } = await supabase
-          .from("owner_names")
+          .from("parties")
           .select("*")
           .eq("tenant_id", tenantId)
           .order("name");
-
-        if (error) throw error;
-        return data;
-      },
-      chartererNames: async () => {
-        const { data, error } = await supabase
-          .from("charterer_names")
-          .select("*")
-          .eq("tenant_id", tenantId)
-          .order("name");
-
-        if (error) throw error;
-        return data;
-      },
-      counterparties: async () => {
-        const { data, error } = await supabase
-          .from("counterparties")
-          .select("*")
-          .eq("tenant_id", tenantId)
-          .order("name");
-
+      
         if (error) throw error;
         return data;
       },
@@ -235,12 +221,13 @@ export function getTenantClient(session: Session | null) {
         if (role !== "customer_admin" && role !== "super_admin") {
           throw new Error("Unauthorized");
         }
-
-        const { data, error } = await supabase
-          .from("users")
-          .select("*")
-          .eq("tenant_id", tenantId)
-          .order("created_at", { ascending: false });
+        // Handle super_admin case where tenantId is null
+        const query = supabase.from("users").select("*");
+        if (tenantId) {
+          query.eq("tenant_id", tenantId);
+        }
+        
+        const { data, error } = await query.order("created_at", { ascending: false });
 
         if (error) throw error;
         return data;

@@ -31,7 +31,8 @@ const adminNavigation = [
 ];
 
 const superAdminNavigation = [
-  { name: "Customers", href: "/admin/customers", icon: Building2 },
+  { name: "Tenants", href: "/admin", icon: Building2 },
+  { name: "All Users", href: "/admin/users", icon: Users },
   { name: "Settings", href: "/admin/settings", icon: Settings },
 ];
 

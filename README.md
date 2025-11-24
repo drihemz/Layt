@@ -1,3 +1,97 @@
+# Laytime (Layt)
+
+Multi-tenant SaaS for laytime & demurrage calculation and management.
+
+This repository contains a Next.js (App Router) + TypeScript frontend that integrates with Supabase for auth and data storage. The project is multi-tenant and uses Row-Level Security (RLS) in the database.
+
+**Quick summary**
+- Frameworks: `Next.js` (App Router), `TypeScript`, `Tailwind CSS`
+- Backend: `Supabase` (Postgres, RLS, migrations)
+- Auth: `NextAuth.js` with Supabase session integration
+
+## Quick Start
+
+1. Install dependencies
+
+```powershell
+npm install
+```
+
+2. Create `.env.local` at project root and add at minimum:
+
+```
+NEXTAUTH_SECRET=your_nextauth_secret
+NEXTAUTH_URL=http://localhost:3000
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=public-anon-key
+SUPABASE_SERVICE_ROLE_KEY=service-role-key-KEEP-SECRET
+```
+
+Notes:
+- `SUPABASE_SERVICE_ROLE_KEY` is required for some server-side mutation endpoints (used to bypass RLS). Keep it secret — do NOT commit or share it.
+- If you don't set the service role key, client reads will work but some writes (lookup management) will be blocked by RLS.
+
+3. Run migrations (use Supabase SQL or migration scripts in `supabase/migrations`)
+
+4. Create an initial super admin (script provided):
+
+```powershell
+node scripts/create-super-admin.mjs
+```
+
+5. Start the dev server
+
+```powershell
+npm run dev
+```
+
+## Development notes
+
+- If you hit Tailwind build errors related to `@apply` or dynamic classes, try removing `.next` and local caches and restart:
+
+```powershell
+rimraf .next
+rimraf node_modules/.cache
+npm run dev
+```
+
+- The app uses tenant-scoped helpers in `src/lib/db-helpers.ts` for reads. Writes that need elevated privileges are routed through `src/app/api/lookup/route.ts` (server-side) and require `SUPABASE_SERVICE_ROLE_KEY`.
+
+## Key files and locations
+
+- App entry/layout: `src/app/layout.tsx`
+- Dashboard: `src/app/page.tsx`
+- Voyages list: `src/app/voyages/page.tsx`
+- Create Voyage dialog: `src/components/voyages/CreateVoyageDialog.tsx`
+- Lookup / Data management UI: `src/app/data/page.tsx`
+- Server-side lookup mutation route: `src/app/api/lookup/route.ts`
+- Supabase helpers: `src/lib/supabase.ts`, `src/lib/db-helpers.ts`
+
+## Supabase & RLS guidance
+
+- The database enforces tenant isolation via RLS. Client-side anonymous or tenant-scoped requests can be allowed by RLS policies, but some flows (admin-managed lookup inserts across tenants) use a server endpoint which executes queries with the service role.
+- Recommended secure pattern:
+  - Validate the user's session server-side (NextAuth) and retrieve their `tenant_id`.
+  - Use the service-role client only after server-side validation and apply `tenant_id` when mutating lookup tables.
+
+## Testing & next work
+
+- There are currently no automated tests in the repo. Recommended next steps:
+  - Add basic unit/integration tests for the voyages list and create flow.
+  - Add a protected API auth middleware to secure server endpoints.
+
+## Contributing
+
+- Branch from `main`, open PRs with a short description and link to relevant issue.
+
+---
+
+If you want, I can:
+- Add runnable dev instructions to `package.json` (scripts)
+- Harden the `/api/lookup` route with NextAuth session checks
+- Add a short troubleshooting section for the most common Supabase/RLS errors
+
+If you'd like any of those, tell me which and I'll implement them.
 # Laytime and Demurrage Platform
 
 **Multi-tenant SaaS tool for laytime and demurrage calculation and management (Next.js, Supabase, Tailwind).**
