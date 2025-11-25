@@ -20,6 +20,7 @@ interface Vessel {
   vessel_type: string;
   flag: string;
   dwt: number;
+  tenants: { name: string } | null;
 }
 
 interface Party {
@@ -47,6 +48,7 @@ export default function VesselsTabContent({ vessels, parties, session }: { vesse
               <TableHead>Type</TableHead>
               <TableHead>Flag</TableHead>
               <TableHead>DWT</TableHead>
+              <TableHead>Tenant</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -59,6 +61,7 @@ export default function VesselsTabContent({ vessels, parties, session }: { vesse
                 <TableCell>{vessel.vessel_type}</TableCell>
                 <TableCell>{vessel.flag}</TableCell>
                 <TableCell>{vessel.dwt}</TableCell>
+                <TableCell>{vessel.tenants?.name || 'Public'}</TableCell>
                 <TableCell className="text-right">
                   <VesselDialog vessel={vessel} parties={parties} session={session}>
                     <Button variant="ghost" size="sm">Edit</Button>

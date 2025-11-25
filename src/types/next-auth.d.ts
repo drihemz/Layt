@@ -15,6 +15,7 @@ declare module "next-auth" {
         slug: string;
       };
     };
+    supabaseAccessToken?: string;
   }
 
   interface User {
@@ -24,6 +25,7 @@ declare module "next-auth" {
     role: string;
     tenantId: string;
     tenant?: any;
+    supabaseAccessToken?: string;
   }
 }
 
@@ -33,6 +35,7 @@ declare module "next-auth/jwt" {
     role: string;
     tenantId: string;
     tenant?: any;
+    supabaseAccessToken?: string;
   }
 }
 

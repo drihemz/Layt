@@ -19,6 +19,7 @@ interface Port {
   country: string;
   latitude: number;
   longitude: number;
+  tenants: { name: string } | null;
 }
 
 export default function PortsTabContent({ ports, session }: { ports: Port[], session: Session }) {
@@ -39,6 +40,7 @@ export default function PortsTabContent({ ports, session }: { ports: Port[], ses
               <TableHead>Country</TableHead>
               <TableHead>Latitude</TableHead>
               <TableHead>Longitude</TableHead>
+              <TableHead>Tenant</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -50,6 +52,7 @@ export default function PortsTabContent({ ports, session }: { ports: Port[], ses
                 <TableCell>{port.country}</TableCell>
                 <TableCell>{port.latitude}</TableCell>
                 <TableCell>{port.longitude}</TableCell>
+                <TableCell>{port.tenants?.name || 'Public'}</TableCell>
                 <TableCell className="text-right">
                   <PortDialog port={port} session={session}>
                     <Button variant="ghost" size="sm">Edit</Button>

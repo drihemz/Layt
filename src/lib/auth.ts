@@ -2,6 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { supabase } from "./supabase";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -17,7 +18,6 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          // Get user from database
           const { data: user, error } = await supabase
             .from("users")
             .select("*, tenants(*)")
@@ -29,7 +29,6 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          // Verify password
           if (!user.password_hash) {
             return null;
           }
@@ -43,7 +42,20 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          // Return user object for session
+          const payload = {
+            aud: "authenticated",
+            exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
+            sub: user.id,
+            email: user.email,
+            role: user.role,
+            app_metadata: {
+              provider: "credentials",
+              tenantId: user.tenant_id,
+            },
+          };
+
+          const token = jwt.sign(payload, process.env.SUPABASE_JWT_SECRET!);
+
           return {
             id: user.id,
             email: user.email,
@@ -51,6 +63,7 @@ export const authOptions: NextAuthOptions = {
             role: user.role,
             tenantId: user.tenant_id,
             tenant: user.tenants,
+            supabaseAccessToken: token,
           };
         } catch (error) {
           console.error("Auth error:", error);
@@ -66,6 +79,7 @@ export const authOptions: NextAuthOptions = {
         token.role = user.role;
         token.tenantId = user.tenantId;
         token.tenant = user.tenant;
+        token.supabaseAccessToken = (user as any).supabaseAccessToken;
       }
       return token;
     },
@@ -75,6 +89,7 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role as string;
         session.user.tenantId = token.tenantId as string;
         session.user.tenant = token.tenant as any;
+        session.supabaseAccessToken = token.supabaseAccessToken as string;
       }
       return session;
     },

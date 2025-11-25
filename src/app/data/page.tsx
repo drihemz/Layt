@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { createServerClient } from "@/lib/supabase"; // Use the server client directly
+import { getLookupData } from "@/lib/data-access";
 import { redirect } from "next/navigation";
 import PartiesTabContent from "@/components/data/PartiesTabContent";
 import VesselsTabContent from "@/components/data/VesselsTabContent";
@@ -17,55 +17,13 @@ import {
 
 export const revalidate = 0; // Prevent caching
 
-async function getData(tenantId: string, isSuperAdmin: boolean) {
-  const supabase = createServerClient();
-
-  const buildQuery = (table: string) => {
-    let query = supabase.from(table).select('*');
-    if (isSuperAdmin) {
-      // Super admin can see all data
-    } else {
-      query = query.or(`tenant_id.eq.${tenantId},is_public.eq.true`);
-    }
-    return query.order('name');
-  };
-
-  const [partiesRes, vesselsRes, portsRes, cargoNamesRes, charterPartiesRes] = await Promise.all([
-    buildQuery('parties'),
-    buildQuery('vessels'),
-    buildQuery('ports'),
-    buildQuery('cargo_names'),
-    buildQuery('charter_parties'),
-  ]);
-  
-  if (partiesRes.error || vesselsRes.error || portsRes.error || cargoNamesRes.error || charterPartiesRes.error) {
-    console.error("Error fetching data:", partiesRes.error || vesselsRes.error || portsRes.error || cargoNamesRes.error || charterPartiesRes.error);
-    return { parties: [], vessels: [], ports: [], cargoNames: [], charterParties: [] };
-  }
-
-  return {
-    parties: partiesRes.data || [],
-    vessels: vesselsRes.data || [],
-    ports: portsRes.data || [],
-    cargoNames: cargoNamesRes.data || [],
-    charterParties: charterPartiesRes.data || [],
-  };
-}
-
 export default async function DataPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     redirect("/auth/login");
   }
 
-  const { tenantId, role } = session.user;
-  const isSuperAdmin = role === 'super_admin';
-
-  if (!tenantId && !isSuperAdmin) {
-    redirect("/auth/login");
-  }
-
-  const { parties, vessels, ports, cargoNames, charterParties } = await getData(tenantId!, isSuperAdmin);
+  const { parties, vessels, ports, cargoNames, charterParties } = await getLookupData(session);
 
   return (
     <div className="p-4 md:p-8 space-y-6">

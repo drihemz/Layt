@@ -25,11 +25,15 @@ NEXTAUTH_URL=http://localhost:3000
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=public-anon-key
 SUPABASE_SERVICE_ROLE_KEY=service-role-key-KEEP-SECRET
+EMAIL_SERVER=smtp://user:pass@smtp.example.com:587
+EMAIL_FROM=noreply@example.com
 ```
 
 Notes:
 - `SUPABASE_SERVICE_ROLE_KEY` is required for some server-side mutation endpoints (used to bypass RLS). Keep it secret — do NOT commit or share it.
 - If you don't set the service role key, client reads will work but some writes (lookup management) will be blocked by RLS.
+- The authentication flow uses email-based magic links. You need to configure the `EMAIL_SERVER` and `EMAIL_FROM` environment variables for the emails to be sent. For development, you can use a tool like [MailHog](https://github.com/mailhog/MailHog) to catch the emails locally.
+
 
 3. Run migrations (use Supabase SQL or migration scripts in `supabase/migrations`)
 
@@ -98,6 +102,12 @@ If you'd like any of those, tell me which and I'll implement them.
 
 ---
 
+## Project Status
+
+For a detailed list of completed tasks and the project roadmap, please see the [TODO.md](TODO.md) file.
+
+---
+
 ## What Has Been Accomplished
 
 ### Core Foundation
@@ -116,6 +126,11 @@ If you'd like any of those, tell me which and I'll implement them.
 - **Dashboard**: Responsive hero/KPI cards, animated stats (voyages, claims, claims in progress, amount summary), recent voyages/claims widgets.
 - **Navigation**: Maritime sidebar with role-based links (main, admin, super-admin sections).
 - **Modern styles**: Opacity layers, blur, gradients, animated shimmer.
+- **Data Management**:
+  - KYC status is now a dropdown for data consistency.
+  - `super_admin` can create voyages for specific tenants.
+  - `super_admin` can create lookup data (parties, vessels, ports, cargo, charter parties) and make it visible to all tenants.
+  - Tenant creation dialog UI has been improved.
 - **Bare minimum Tailwind (for now)**: All custom classes removed temporarily to isolate/fix build bug.
 
 ---
@@ -128,7 +143,7 @@ If you'd like any of those, tell me which and I'll implement them.
    ```
 2. Add `.env.local` with your Supabase and NextAuth credentials.
 3. Create database schema:
-   - Use the migration in `supabase/migrations/001_initial_schema.sql` (via Supabase SQL editor or provided script)
+   - Use the migration in `supabase/migrations/` (via Supabase SQL editor or provided script)
 4. Create your first super admin user:
    ```bash
    node scripts/create-super-admin.mjs
@@ -150,9 +165,7 @@ If you'd like any of those, tell me which and I'll implement them.
 
 ## Next Steps
 
-- Gradually restore custom styles (track which section/file causes build error)
-- Continue with: Voyages screen, Claims screen, Calculation UI, Data screen, Admin panels
-- Refine UX/UI based on current market tools for laytime management.
+- See [TODO.md](TODO.md) for the project roadmap.
 
 ---
 

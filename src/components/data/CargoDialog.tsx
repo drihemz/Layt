@@ -109,7 +109,7 @@ export function CargoDialog({ cargo, children, session }: CargoDialogProps) {
     }
 
     const payload: any = {
-      table: "cargo_names",
+      table: "cargo",
       id: cargo?.id,
       name,
       is_public: isPublic,

@@ -15,6 +15,7 @@ import { CargoDialog } from "./CargoDialog";
 interface Cargo {
   id: string;
   name: string;
+  tenants: { name: string } | null;
 }
 
 export default function CargoTabContent({ cargoNames, session }: { cargoNames: Cargo[], session: Session }) {
@@ -31,6 +32,7 @@ export default function CargoTabContent({ cargoNames, session }: { cargoNames: C
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              <TableHead>Tenant</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -38,6 +40,7 @@ export default function CargoTabContent({ cargoNames, session }: { cargoNames: C
             {cargoNames.map((cargo) => (
               <TableRow key={cargo.id}>
                 <TableCell>{cargo.name}</TableCell>
+                <TableCell>{cargo.tenants?.name || 'Public'}</TableCell>
                 <TableCell className="text-right">
                   <CargoDialog cargo={cargo} session={session}>
                     <Button variant="ghost" size="sm">Edit</Button>
