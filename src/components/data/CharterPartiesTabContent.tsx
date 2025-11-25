@@ -36,6 +36,7 @@ export default function CharterPartiesTabContent({ charterParties, session }: { 
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Date Signed</TableHead>
+              <TableHead>Public</TableHead>
               <TableHead>Document URL</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -46,6 +47,7 @@ export default function CharterPartiesTabContent({ charterParties, session }: { 
                 <TableCell>{cp.name}</TableCell>
                 <TableCell>{cp.charter_party_type}</TableCell>
                 <TableCell>{cp.signed_date}</TableCell>
+                <TableCell>{(cp as any).is_public ? 'Yes' : 'No'}</TableCell>
                 <TableCell><a href={cp.document_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">{cp.document_url}</a></TableCell>
                 <TableCell className="text-right">
                   <CharterPartyDialog charterParty={cp} session={session}>

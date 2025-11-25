@@ -32,6 +32,7 @@ export default function CargoTabContent({ cargoNames, session }: { cargoNames: C
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              <TableHead>Public</TableHead>
               <TableHead>Tenant</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -40,7 +41,8 @@ export default function CargoTabContent({ cargoNames, session }: { cargoNames: C
             {cargoNames.map((cargo) => (
               <TableRow key={cargo.id}>
                 <TableCell>{cargo.name}</TableCell>
-                <TableCell>{cargo.tenants?.name || 'Public'}</TableCell>
+                <TableCell>{(cargo as any).is_public ? 'Yes' : 'No'}</TableCell>
+                <TableCell>{cargo.tenants?.name || ((cargo as any).is_public ? 'Public' : '')}</TableCell>
                 <TableCell className="text-right">
                   <CargoDialog cargo={cargo} session={session}>
                     <Button variant="ghost" size="sm">Edit</Button>

@@ -78,3 +78,31 @@ This file tracks the development progress of the Laytime Platform. It is designe
 - [ ] **API Hardening:**
   - [ ] Add session checks to all protected API routes.
   - [ ] Implement robust error handling and logging.
+
+### High Priority Bug Fixes (New)
+
+- [x] **Fix 1 — Super Admin voyages visibility**
+  - [ ] Update voyages listing UI (`src/app/voyages/page.tsx`) to allow `super_admin` to view all voyages and optionally filter by tenant.
+  - [ ] Update server logic to fetch all voyages for `super_admin` (no tenant_id filter), and add a tenant selector to filter.
+  - [ ] Add tests to verify `super_admin` sees all voyages and other roles only see tenant-specific voyages.
+
+- [x] **Fix 2 — Super Admin Create Voyage lookups**
+  - [ ] Modify `CreateVoyageDialog` to fetch lookups for the selected tenant when `super_admin` is creating a voyage for another tenant (instead of relying on `lookups` passed in on the page).
+  - [ ] Ensure server-side `createServerClient()` is used to fetch tenant-scoped lookups and public lookups.
+
+- [x] **Fix 3 — `is_public` visibility & Tenant assignment**
+  - [ ] Update all data dialogs (Party/Vessel/Port/Cargo/CharterParty) so that when `is_public=true`, the `tenant_id` field is omitted or set to null.
+  - [ ] Update list views to show both `tenant` and `is_public` indicator columns so it's clear which records are tenant-specific vs public.
+  - [ ] Add server-side validation in `/api/lookup` to enforce `tenant_id = null` for public records and prevent tenant scoping for public items.
+
+- [x] **Fix 4 — Admins not seeing tenant & public records**
+  - [ ] Ensure RLS policies inspect the correct `tenantId` claim from tokens by making it a top-level claim in the Supabase JWT.
+  - [ ] Add a server-side session check or helper function to detect tenant context for non-super_admin users and return the combined dataset (tenant-specific + public).
+
+- [x] **Fix 5 — Operators not seeing public data when creating voyages**
+  - [ ] Verify operator sessions include `tenantId` claim in their Supabase JWT and can read public items subject to RLS policies.
+  - [ ] Add tests to confirm operator-level reads return tenant-specific items and `is_public` items.
+
+- [ ] **Migration & Data Cleanup**
+  - [ ] Add a migration script to set `tenant_id` to NULL for lookup records where `is_public = true`, to standardize public items.
+  - [ ] Confirm with a DB backup and add small script to run at maintenance window.

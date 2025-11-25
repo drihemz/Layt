@@ -40,6 +40,7 @@ export default function PortsTabContent({ ports, session }: { ports: Port[], ses
               <TableHead>Country</TableHead>
               <TableHead>Latitude</TableHead>
               <TableHead>Longitude</TableHead>
+              <TableHead>Public</TableHead>
               <TableHead>Tenant</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -52,7 +53,8 @@ export default function PortsTabContent({ ports, session }: { ports: Port[], ses
                 <TableCell>{port.country}</TableCell>
                 <TableCell>{port.latitude}</TableCell>
                 <TableCell>{port.longitude}</TableCell>
-                <TableCell>{port.tenants?.name || 'Public'}</TableCell>
+                <TableCell>{(port as any).is_public ? 'Yes' : 'No'}</TableCell>
+                <TableCell>{port.tenants?.name || ((port as any).is_public ? 'Public' : '')}</TableCell>
                 <TableCell className="text-right">
                   <PortDialog port={port} session={session}>
                     <Button variant="ghost" size="sm">Edit</Button>

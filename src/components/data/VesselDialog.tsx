@@ -144,8 +144,10 @@ export function VesselDialog({ vessel, parties, children, session }: VesselDialo
       is_public: isPublic,
     };
 
-    if (isSuperAdmin) {
-      payload.tenant_id = tenantId;
+    if (isPublic) {
+      payload.tenant_id = null;
+    } else if (isSuperAdmin && selectedTenantId) {
+      payload.tenant_id = selectedTenantId;
     } else {
       payload.tenant_id = session.user.tenantId;
     }

@@ -25,6 +25,7 @@ NEXTAUTH_URL=http://localhost:3000
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=public-anon-key
 SUPABASE_SERVICE_ROLE_KEY=service-role-key-KEEP-SECRET
+SUPABASE_JWT_SECRET=your_supabase_jwt_secret
 EMAIL_SERVER=smtp://user:pass@smtp.example.com:587
 EMAIL_FROM=noreply@example.com
 ```
@@ -32,6 +33,8 @@ EMAIL_FROM=noreply@example.com
 Notes:
 - `SUPABASE_SERVICE_ROLE_KEY` is required for some server-side mutation endpoints (used to bypass RLS). Keep it secret — do NOT commit or share it.
 - If you don't set the service role key, client reads will work but some writes (lookup management) will be blocked by RLS.
+ - Super-admin notes: `super_admin` can view and create across tenants. When logged in as `super_admin`, you can optionally filter voyages by adding `?tenantId=<id>` to the Voyages listing page or use the tenant selector on the Voyages page.
+ - `is_public` items ("Visible to all tenants") are now only allowed to be created/marked by `super_admin`, and will not be associated with a `tenant_id` (i.e., `tenant_id` = NULL) so they are visible to all tenants.
 - The authentication flow uses email-based magic links. You need to configure the `EMAIL_SERVER` and `EMAIL_FROM` environment variables for the emails to be sent. For development, you can use a tool like [MailHog](https://github.com/mailhog/MailHog) to catch the emails locally.
 
 

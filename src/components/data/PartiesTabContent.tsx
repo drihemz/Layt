@@ -40,6 +40,7 @@ export default function PartiesTabContent({ parties, session }: { parties: Party
               <TableHead>Country</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>KYC Status</TableHead>
+              <TableHead>Public</TableHead>
               <TableHead>Tenant</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -52,7 +53,8 @@ export default function PartiesTabContent({ parties, session }: { parties: Party
                 <TableCell>{party.country}</TableCell>
                 <TableCell>{party.email}</TableCell>
                 <TableCell>{party.kyc_status}</TableCell>
-                <TableCell>{party.tenants?.name || 'Public'}</TableCell>
+                <TableCell>{party.is_public ? 'Yes' : 'No'}</TableCell>
+                <TableCell>{party.tenants?.name || (party.is_public ? 'Public' : '')}</TableCell>
                 <TableCell className="text-right">
                   <PartyDialog party={party} session={session}>
                     <Button variant="ghost" size="sm">Edit</Button>

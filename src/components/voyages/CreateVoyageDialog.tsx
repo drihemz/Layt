@@ -47,9 +47,10 @@ type Tenant = {
 type Props = {
   lookups: Lookups;
   session: Session;
+  defaultTenantId?: string;
 };
 
-export function CreateVoyageDialog({ lookups, session }: Props) {
+export function CreateVoyageDialog({ lookups, session, defaultTenantId }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState<Date | undefined>();
@@ -63,7 +64,8 @@ export function CreateVoyageDialog({ lookups, session }: Props) {
   const [charterPartyId, setCharterPartyId] = useState("");
   const [cargoQuantity, setCargoQuantity] = useState<number | string>('');
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [selectedTenantId, setSelectedTenantId] = useState<string>('');
+  const [localLookups, setLocalLookups] = useState<Lookups>(lookups);
+  const [selectedTenantId, setSelectedTenantId] = useState<string>(defaultTenantId || '');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +93,31 @@ export function CreateVoyageDialog({ lookups, session }: Props) {
       fetchTenants();
     }
   }, [isSuperAdmin, open]);
+
+    useEffect(() => {
+      async function fetchLookupForTenant() {
+        if (!selectedTenantId) return;
+        try {
+          const url = `/api/lookup?tenant_id=${selectedTenantId}`;
+          const res = await fetch(url);
+          if (!res.ok) return;
+          const json = await res.json();
+          const data = json.data;
+          setLocalLookups({
+            parties: data.parties || [],
+            vessels: data.vessels || [],
+            cargoNames: data.cargo_names || [],
+            charterParties: data.charter_parties || [],
+          });
+        } catch (err) {
+          console.error('Failed to fetch tenant lookups', err);
+        }
+      }
+
+      if (open && selectedTenantId) fetchLookupForTenant();
+      // If no selected tenant and not super admin, keep passed-in lookups
+      if (!selectedTenantId) setLocalLookups(lookups);
+    }, [selectedTenantId, open]);
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -199,7 +226,7 @@ export function CreateVoyageDialog({ lookups, session }: Props) {
               <Select value={vesselId} onValueChange={(v: string) => setVesselId(v)}>
                 <SelectTrigger id="vessel" className="col-span-3"><SelectValue placeholder="Select a vessel" /></SelectTrigger>
                 <SelectContent>
-                  {lookups.vessels.map((v) => (
+                  {localLookups.vessels.map((v) => (
                     <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -216,7 +243,7 @@ export function CreateVoyageDialog({ lookups, session }: Props) {
               <Select value={cargoId} onValueChange={(v: string) => setCargoId(v)}>
                 <SelectTrigger id="cargo" className="col-span-3"><SelectValue placeholder="Select cargo" /></SelectTrigger>
                 <SelectContent>
-                  {lookups.cargoNames.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  {localLookups.cargoNames.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -231,7 +258,7 @@ export function CreateVoyageDialog({ lookups, session }: Props) {
               <Select value={ownerId} onValueChange={(v: string) => setOwnerId(v)}>
                 <SelectTrigger id="owner" className="col-span-3"><SelectValue placeholder="Select owner" /></SelectTrigger>
                 <SelectContent>
-                  {lookups.parties.filter(p => p.party_type === 'Vessel Owner').map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
+                  {localLookups.parties.filter(p => p.party_type === 'Vessel Owner').map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -241,7 +268,7 @@ export function CreateVoyageDialog({ lookups, session }: Props) {
               <Select value={chartererId} onValueChange={(v: string) => setChartererId(v)}>
                 <SelectTrigger id="charterer" className="col-span-3"><SelectValue placeholder="Select charterer" /></SelectTrigger>
                 <SelectContent>
-                  {lookups.parties.filter(p => p.party_type === 'Charterer').map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  {localLookups.parties.filter(p => p.party_type === 'Charterer').map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -251,7 +278,7 @@ export function CreateVoyageDialog({ lookups, session }: Props) {
               <Select value={charterPartyId} onValueChange={(v: string) => setCharterPartyId(v)}>
                 <SelectTrigger id="charter-party" className="col-span-3"><SelectValue placeholder="Select charter party" /></SelectTrigger>
                 <SelectContent>
-                  {lookups.charterParties.map((cp) => <SelectItem key={cp.id} value={cp.id}>{cp.name}</SelectItem>)}
+                  {localLookups.charterParties.map((cp) => <SelectItem key={cp.id} value={cp.id}>{cp.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

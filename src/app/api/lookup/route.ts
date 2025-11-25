@@ -40,11 +40,21 @@ export async function POST(req: Request) {
     const targetTable = (TABLE_MAP as any)[table]
     if (!targetTable) return NextResponse.json({ error: 'invalid table' }, { status: 400 })
 
-    // Ensure tenant_id is correctly set for the operation
-    const finalDataToInsert = { ...dataToInsert, tenant_id: tenantId };
+    // Ensure is_public (visible to all) can only be set by super_admin
+    if (dataToInsert.is_public && role !== 'super_admin') {
+      return NextResponse.json({ error: 'Forbidden: Only super_admin can mark items as public' }, { status: 403 })
+    }
+
+    // Ensure tenant_id is correctly set for the operation; if the item is public, tenant_id should be null
+    const finalDataToInsert = { ...dataToInsert } as any;
+    if (finalDataToInsert.is_public) {
+      finalDataToInsert.tenant_id = null;
+    } else {
+      finalDataToInsert.tenant_id = tenantId;
+    }
 
     // Customer admin can only modify their own tenant's lookup data
-    if (role === 'customer_admin' && finalDataToInsert.tenant_id !== tenantId) {
+    if (role === 'customer_admin' && !finalDataToInsert.is_public && finalDataToInsert.tenant_id !== tenantId) {
       return NextResponse.json({ error: 'Forbidden: Customer admins can only modify their own tenant data' }, { status: 403 })
     }
 
@@ -58,6 +68,52 @@ export async function POST(req: Request) {
   } catch (err: any) {
     console.error("API POST error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
+
+export async function GET(req: Request) {
+  try {
+    const authResult = await authorizeRequest(req as any);
+    if (authResult instanceof NextResponse) return authResult;
+    const { session, role, tenantId } = authResult;
+
+    const url = new URL(req.url);
+    const qTenantId = url.searchParams.get('tenant_id');
+
+    let targetTenantId = tenantId;
+    if (role === 'super_admin') {
+      // super_admin can provide a tenantId to filter, or see all if not provided
+      targetTenantId = qTenantId || undefined;
+    }
+
+    // If targetTenantId is provided, include tenant-specific rows + public
+    const supabase = createServerClient();
+    const tables = ['parties', 'vessels', 'ports', 'cargo_names', 'charter_parties'];
+    const results: Record<string, any[]> = {};
+
+    for (const t of tables) {
+      let q;
+      if (role === 'super_admin' && !targetTenantId) {
+        q = supabase.from(t).select('*');
+      } else {
+        q = supabase
+          .from(t)
+          .select('*')
+          .or(targetTenantId ? `tenant_id.eq.${targetTenantId},is_public.eq.true` : `is_public.eq.true`);
+      }
+      const { data, error } = await q;
+      if (error) {
+        console.error(`Error fetching ${t}:`, error);
+        results[t] = [];
+      } else {
+        results[t] = data || [];
+      }
+    }
+
+    return NextResponse.json({ data: results });
+  } catch (err: any) {
+    console.error("API GET error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
@@ -92,8 +148,21 @@ export async function PUT(req: Request) {
       }
     }
 
+    // For PUT, enforce is_public -> tenant_id = null, and restrict who can set it
+    if (dataToUpdate.is_public && role !== 'super_admin') {
+      return NextResponse.json({ error: 'Forbidden: Only super_admin can mark items as public' }, { status: 403 })
+    }
+    const finalDataToUpdate = { ...dataToUpdate } as any;
+    if (finalDataToUpdate.is_public) {
+      finalDataToUpdate.tenant_id = null;
+    }
+
     const supabase = createServerClient()
-    const { error } = await supabase.from(targetTable).update(dataToUpdate).eq('id', id).eq('tenant_id', tenantId)
+    let query = supabase.from(targetTable).update(finalDataToUpdate).eq('id', id);
+    if (role !== 'super_admin') {
+      query = query.eq('tenant_id', tenantId);
+    }
+    const { error } = await query;
     if (error) {
       console.error(`Error updating ${targetTable}:`, error);
       return NextResponse.json({ error: error.message }, { status: 500 })
@@ -123,7 +192,11 @@ export async function DELETE(req: Request) {
     }
 
     const supabase = createServerClient()
-    const { error } = await supabase.from(targetTable).delete().eq('id', id).eq('tenant_id', tenantId)
+    let delQuery = supabase.from(targetTable).delete().eq('id', id);
+    if (role !== 'super_admin') {
+      delQuery = delQuery.eq('tenant_id', tenantId);
+    }
+    const { error } = await delQuery;
     if (error) {
       console.error(`Error deleting from ${targetTable}:`, error);
       return NextResponse.json({ error: error.message }, { status: 500 })

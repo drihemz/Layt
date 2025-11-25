@@ -18,9 +18,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
 import { MoreHorizontal, Ship, Search } from "lucide-react";
 import { Session } from "next-auth";
 import { CreateVoyageDialog } from "@/components/voyages/CreateVoyageDialog";
+import { useEffect } from 'react';
 
 type Lookups = {
   parties: any[];
@@ -40,16 +42,52 @@ function EmptyState({ lookups, session }: { lookups: Lookups, session: Session }
   );
 }
 
+function TenantSelector({ currentTenantId }: { currentTenantId?: string }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [tenants, setTenants] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    async function fetchTenants() {
+      const res = await fetch('/api/admin/tenants');
+      if (res.ok) {
+        const json = await res.json();
+        setTenants(json.tenants || []);
+      }
+    }
+    fetchTenants();
+  }, []);
+
+  const handleSelect = (tenantId?: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (tenantId) params.set('tenantId', tenantId); else params.delete('tenantId');
+    router.push(`${window.location.pathname}?${params.toString()}`);
+  };
+
+  return (
+    <Select value={currentTenantId || ''} onValueChange={(v) => handleSelect(v || undefined)}>
+      <SelectTrigger className="w-48 bg-white">
+        <SelectValue placeholder="All tenants" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="">All Tenants</SelectItem>
+        {tenants.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
+}
+
 interface VoyagesClientPageProps {
   voyages: any[];
   lookups: Lookups;
+  tenantIdFilter?: string;
   page: number;
   pageSize: number;
   search: string;
   session: Session;
 }
 
-export default function VoyagesClientPage({ voyages, lookups, page, pageSize, search, session }: VoyagesClientPageProps) {
+export default function VoyagesClientPage({ voyages, lookups, tenantIdFilter, page, pageSize, search, session }: VoyagesClientPageProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -77,6 +115,9 @@ export default function VoyagesClientPage({ voyages, lookups, page, pageSize, se
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-ocean-100 text-ocean-700">{voyages.length}</span>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
+          {session.user.role === 'super_admin' && (
+            <TenantSelector currentTenantId={tenantIdFilter} />
+          )}
           <div className="relative flex-1">
             <Input
               placeholder="Search by reference..."
@@ -86,7 +127,7 @@ export default function VoyagesClientPage({ voyages, lookups, page, pageSize, se
             />
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-ocean-400" />
           </div>
-          <CreateVoyageDialog lookups={lookups} session={session} />
+          <CreateVoyageDialog lookups={lookups} session={session} defaultTenantId={tenantIdFilter} />
         </div>
       </div>
 

@@ -152,8 +152,11 @@ export function PartyDialog({ party, children, session }: PartyDialogProps) {
       is_public: isPublic,
     };
 
-    if (isSuperAdmin) {
-      payload.tenant_id = tenantId;
+    // If the item is public, ensure tenant_id is null to make it available to all tenants
+    if (isPublic) {
+      payload.tenant_id = null;
+    } else if (isSuperAdmin && selectedTenantId) {
+      payload.tenant_id = selectedTenantId;
     } else {
       payload.tenant_id = session.user.tenantId;
     }
@@ -213,10 +216,12 @@ export function PartyDialog({ party, children, session }: PartyDialogProps) {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center space-x-2 mt-6">
-                  <Checkbox id="isPublic" checked={isPublic} onCheckedChange={(checked) => setIsPublic(checked as boolean)} />
-                  <Label htmlFor="isPublic">Visible to all tenants</Label>
-                </div>
+                  {isSuperAdmin && (
+                    <div className="flex items-center space-x-2 mt-6">
+                      <Checkbox id="isPublic" checked={isPublic} onCheckedChange={(checked) => setIsPublic(checked as boolean)} />
+                      <Label htmlFor="isPublic">Visible to all tenants</Label>
+                    </div>
+                  )}
               </div>
             )}
 

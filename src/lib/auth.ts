@@ -48,6 +48,7 @@ export const authOptions: NextAuthOptions = {
             sub: user.id,
             email: user.email,
             role: user.role,
+            tenantId: user.tenant_id, // top-level claim used by RLS policies
             app_metadata: {
               provider: "credentials",
               tenantId: user.tenant_id,

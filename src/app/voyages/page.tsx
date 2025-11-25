@@ -19,9 +19,11 @@ async function getVoyagesData(tenantId: string, search: string, page: number) {
       charterer:charterer_id(name),
       cargo_names(name)
     `)
-    .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+  if (tenantId) {
+    voyagesQuery = voyagesQuery.eq("tenant_id", tenantId);
+  }
   
   if (search) {
     voyagesQuery = voyagesQuery.ilike("voyage_reference", `%${search}%`);
@@ -30,10 +32,11 @@ async function getVoyagesData(tenantId: string, search: string, page: number) {
   // Fetch lookups in parallel
   const [voyagesRes, partiesRes, vesselsRes, cargoNamesRes, charterPartiesRes] = await Promise.all([
     voyagesQuery,
-    supabase.from("parties").select("*").eq("tenant_id", tenantId),
-    supabase.from("vessels").select("*").eq("tenant_id", tenantId),
-    supabase.from("cargo_names").select("*").eq("tenant_id", tenantId),
-    supabase.from("charter_parties").select("*").eq("tenant_id", tenantId),
+    // Lookups should include public entries + tenant scoped ones
+    supabase.from("parties").select("*").or(tenantId ? `tenant_id.eq.${tenantId},is_public.eq.true` : `is_public.eq.true`),
+    supabase.from("vessels").select("*").or(tenantId ? `tenant_id.eq.${tenantId},is_public.eq.true` : `is_public.eq.true`),
+    supabase.from("cargo_names").select("*").or(tenantId ? `tenant_id.eq.${tenantId},is_public.eq.true` : `is_public.eq.true`),
+    supabase.from("charter_parties").select("*").or(tenantId ? `tenant_id.eq.${tenantId},is_public.eq.true` : `is_public.eq.true`),
   ]);
 
   if (voyagesRes.error) {
@@ -56,19 +59,23 @@ export default async function VoyagesPage({
   searchParams?: { [key: string]: string | string[] | undefined };
 }) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.tenantId) {
+  if (!session?.user?.id) {
     redirect("/auth/login");
   }
 
   const search = typeof searchParams?.q === 'string' ? searchParams.q : '';
   const page = typeof searchParams?.page === 'string' ? parseInt(searchParams.page, 10) : 1;
+  // allow super_admin to pass ?tenantId to filter voyages; otherwise super_admin sees all voyages
+  const requestedTenantId = typeof searchParams?.tenantId === 'string' ? searchParams.tenantId : undefined;
+  const tenantIdToUse = session.user.role === 'super_admin' ? requestedTenantId : session.user.tenantId;
 
-  const { voyages, lookups } = await getVoyagesData(session.user.tenantId, search, page);
+  const { voyages, lookups } = await getVoyagesData(tenantIdToUse || '', search, page);
 
   return (
     <VoyagesClientPage
       voyages={voyages}
       lookups={lookups}
+      tenantIdFilter={tenantIdToUse || ''}
       page={page}
       pageSize={PAGE_SIZE}
       search={search}
