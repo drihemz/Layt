@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,9 +33,13 @@ export default function LoginPage() {
         return;
       }
 
-      // Redirect based on role
       if (result?.ok) {
-        router.push("/");
+        const session = await getSession();
+        if (session?.user?.role === "super_admin") {
+          router.push("/admin/dashboard");
+        } else {
+          router.push("/");
+        }
         router.refresh();
       }
     } catch (error) {
@@ -131,4 +135,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

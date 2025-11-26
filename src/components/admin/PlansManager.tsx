@@ -26,22 +26,25 @@ export default function PlansManager({ initialPlans }: { initialPlans: Plan[] })
   const [form, setForm] = useState<Partial<Plan>>({ billing_cycle: "monthly", currency: "USD", status: "active" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isEditing = !!form.id;
 
   const handleSave = async () => {
     setLoading(true);
     setError(null);
     try {
+      const payload = { ...form, price_cents: form.price_cents || 0 };
       const res = await fetch("/api/admin/plans", {
-        method: "POST",
+        method: isEditing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          price_cents: form.price_cents || 0,
-        }),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to create plan");
-      setPlans((prev) => [json.plan, ...prev]);
+      if (!res.ok) throw new Error(json.error || "Failed to save plan");
+      if (isEditing) {
+        setPlans((prev) => prev.map((p) => (p.id === json.plan.id ? json.plan : p)));
+      } else {
+        setPlans((prev) => [json.plan, ...prev]);
+      }
       setForm({ billing_cycle: "monthly", currency: "USD", status: "active" });
     } catch (e: any) {
       setError(e.message);
@@ -55,9 +58,15 @@ export default function PlansManager({ initialPlans }: { initialPlans: Plan[] })
   return (
     <div className="space-y-6">
       <div className="border p-4 rounded-xl bg-white shadow-sm">
-        <h2 className="text-lg font-semibold mb-3">Create Plan</h2>
+        <h2 className="text-lg font-semibold mb-3">{isEditing ? "Edit Plan" : "Create Plan"}</h2>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="grid md:grid-cols-3 gap-3">
+          {isEditing && (
+            <div className="space-y-1">
+              <Label>ID</Label>
+              <Input value={form.id || ""} disabled />
+            </div>
+          )}
           <div className="space-y-1">
             <Label>Name</Label>
             <Input value={form.name || ""} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
@@ -102,9 +111,36 @@ export default function PlansManager({ initialPlans }: { initialPlans: Plan[] })
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-1 col-span-1 md:col-span-3">
+            <Label>Data Management</Label>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={form.allow_data_management !== false} onChange={(e) => setForm((p) => ({ ...p, allow_data_management: e.target.checked }))} />
+                Enable Data Management
+              </label>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+              {["parties","vessels","ports","cargo","charterParties","terms","requests"].map((key) => (
+                <label key={key} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={form.data_tabs ? (form.data_tabs as any)[key] !== false : true}
+                    onChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        data_tabs: { ...(p.data_tabs as any), [key]: e.target.checked },
+                      }))
+                    }
+                  />
+                  {key}
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div className="col-span-1 md:col-span-3">
             <Button onClick={handleSave} disabled={loading}>
-              {loading ? "Saving..." : "Save Plan"}
+              {loading ? "Saving..." : isEditing ? "Update Plan" : "Save Plan"}
             </Button>
           </div>
         </div>
@@ -121,6 +157,7 @@ export default function PlansManager({ initialPlans }: { initialPlans: Plan[] })
               <th className="text-left px-3 py-2">Operators</th>
               <th className="text-left px-3 py-2">Claims/Month</th>
               <th className="text-left px-3 py-2">Status</th>
+              <th className="text-left px-3 py-2">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -133,6 +170,15 @@ export default function PlansManager({ initialPlans }: { initialPlans: Plan[] })
                 <td className="px-3 py-2">{p.max_operators ?? "—"}</td>
                 <td className="px-3 py-2">{p.max_claims_per_month ?? "—"}</td>
                 <td className="px-3 py-2">{p.status}</td>
+                <td className="px-3 py-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setForm({ ...p })}
+                  >
+                    Edit
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>

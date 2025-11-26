@@ -117,7 +117,14 @@ export async function GET(
     .or(termsFilter)
     .order("name", { ascending: true });
 
-  return NextResponse.json({ claim, events, terms: terms || [] });
+  const { data: audit } = await supabase
+    .from("calculation_events_audit")
+    .select("*")
+    .eq("claim_id", params.claimId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  return NextResponse.json({ claim, events, terms: terms || [], audit: audit || [] });
 }
 
 export async function POST(
@@ -186,6 +193,75 @@ export async function POST(
     return NextResponse.json({ event: data }, { status: 201 });
   } catch (e: any) {
     console.error("POST /events error", e);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+export async function PUT(
+  req: Request,
+  { params }: { params: { claimId: string } }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const supabase = createServerClient();
+  const { claim, error } = await loadClaim(supabase, params.claimId);
+  if (error || !claim) return NextResponse.json({ error: "Claim not found" }, { status: 404 });
+  if (session.user.role !== "super_admin" && session.user.tenantId !== claim.tenant_id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  try {
+    const body = await req.json();
+    const { id, deduction_name, from_datetime, to_datetime, rate_of_calculation = 100 } = body || {};
+    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+    const { data: existing, error: fetchError } = await supabase.from("calculation_events").select("*").eq("id", id).single();
+    if (fetchError || !existing) return NextResponse.json({ error: "Event not found" }, { status: 404 });
+
+    const time_used = hoursBetween(from_datetime || existing.from_datetime, to_datetime || existing.to_datetime, rate_of_calculation);
+    const { data, error: updateError } = await supabase
+      .from("calculation_events")
+      .update({
+        deduction_name: deduction_name ?? existing.deduction_name,
+        from_datetime: from_datetime ?? existing.from_datetime,
+        to_datetime: to_datetime ?? existing.to_datetime,
+        rate_of_calculation,
+        time_used,
+      })
+      .eq("id", id)
+      .select()
+      .single();
+    if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+    return NextResponse.json({ event: data });
+  } catch (e: any) {
+    console.error("PUT /events error", e);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: { claimId: string } }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const supabase = createServerClient();
+  const { claim, error } = await loadClaim(supabase, params.claimId);
+  if (error || !claim) return NextResponse.json({ error: "Claim not found" }, { status: 404 });
+  if (session.user.role !== "super_admin" && session.user.tenantId !== claim.tenant_id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  try {
+    const body = await req.json();
+    const { id } = body || {};
+    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+    const { error: delError } = await supabase.from("calculation_events").delete().eq("id", id);
+    if (delError) return NextResponse.json({ error: delError.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    console.error("DELETE /events error", e);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

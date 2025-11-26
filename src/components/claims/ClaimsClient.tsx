@@ -73,9 +73,10 @@ export default function ClaimsClient({
   };
 
   const handleTenantChange = (value: string) => {
-    setTenantValue(value);
+    const parsed = value === "all" ? "" : value;
+    setTenantValue(parsed);
     const params = new URLSearchParams(searchParams);
-    if (value) params.set("tenantId", value); else params.delete("tenantId");
+    if (parsed) params.set("tenantId", parsed); else params.delete("tenantId");
     router.push(`${pathname}?${params.toString()}`);
   };
 
@@ -100,12 +101,12 @@ export default function ClaimsClient({
         </div>
         <div className="flex gap-2 w-full md:w-auto">
           {isSuperAdmin && (
-            <Select value={tenantValue} onValueChange={handleTenantChange}>
+            <Select value={tenantValue || "all"} onValueChange={handleTenantChange}>
               <SelectTrigger className="w-48 bg-white">
                 <SelectValue placeholder="All tenants" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Tenants</SelectItem>
+                <SelectItem value="all">All Tenants</SelectItem>
                 {tenants.map((t) => (
                   <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                 ))}

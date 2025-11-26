@@ -69,9 +69,39 @@ This file tracks the development progress of the Laytime Platform. It is designe
   - [x] Invoices API and page to list/mark paid; dashboard metrics for due/paid.
   - [x] Super admin dashboard with core metrics (tenants, users, voyages, claims, invoice totals).
   - [x] Added max_claims_per_month to plans and surfaced in Plans UI.
-  - [ ] Tenant plan assignment UI (link plan to tenant, seats/limits).
-  - [ ] Feature gating enforcement (data tabs, seats, max voyages/claims) in app surfaces.
-  - [ ] Automated invoice generation per plan/period.
+  - [x] Brought back dedicated dashboard at /admin/dashboard (modern gradient cards) and kept tenants list on /admin only.
+  - [x] Login now routes super_admin to /admin/dashboard after sign-in.
+  - [x] Navigation cleanup: dashboard link points to /admin/dashboard; Tenants moved to /admin/tenants; removed duplicate dashboard link.
+  - [x] Hid the base "/" dashboard link for super_admin to avoid duplicate sidebar dashboards.
+  - [x] Tenant plan assignment UI (link plan to tenant, seats/limits) with API upsert.
+  - [x] Basic feature gating: enforce plan voyage limit on voyage create; enforce claim and monthly claim limits on claim create.
+  - [x] Automated invoice generation endpoint for active tenant plans (current month, idempotent).
+  - [x] Seat limits enforced on user creation (admins/operators) based on tenant plan.
+  - [x] Fixed tenant plan upsert conflict handling and made plans editable via UI.
+  - [x] Feature gating in UI: Data Management tabs disabled per plan flags; messaging when not included.
+  - [x] Tenant page shows usage vs limits (admins, operators, voyages, claims, claims/month).
+  - [x] Users page shows seat usage and blocks inviting roles when seats are full.
+  - [ ] Scheduled/cron trigger for invoice generation.
+- [ ] **Claims Enhancements**
+  - [x] Added claim attachments (NOR/SOF) upload/list/delete with storage.
+  - [x] Added SOF event audit trail (insert/update/delete logged and shown on calculator).
+  - [ ] PDF export of laytime statement.
+  - [x] SOF events now editable/deletable.
+  - [x] Time format toggle (DD.HH.MM.SS vs decimal days) in calculator.
+  - [x] Allowed-time preview in claim creation based on voyage cargo and rate.
+- [ ] **Voyage Enhancements**
+  - [x] Added port_calls table and API (ETA/ETD, activity, status, sequence).
+  - [x] Port Calls dialog to manage legs per voyage.
+  - [ ] Link claims creation from port calls and surface per-port claims.
+  - [ ] Show port call summary in voyages list and voyage details.
+  - [ ] Reversible scope usage across ports (load-only/discharge-only/all) to integrate with calculations.
+- [ ] **Voyage Enhancements**
+  - [ ] Multi-port legs with ETA/ETD and status tracking.
+- [ ] **Data Management Enhancements**
+  - [ ] Holidays/terms library (reusable calendars).
+  - [ ] Bulk import and dedupe tools for lookups.
+- [ ] **UX Enhancements**
+  - [ ] Live allowed-time preview + validation improvements on claim create.
 
 ### To Be Done
 

@@ -67,6 +67,25 @@ type EventRow = {
   time_used: number;
 };
 
+type Attachment = {
+  id: string;
+  claim_id: string;
+  attachment_type: string;
+  filename: string;
+  file_url: string;
+  file_size?: number;
+  created_at?: string;
+};
+
+type AuditRow = {
+  id: string;
+  action: string;
+  created_at: string;
+  data: any;
+};
+
+type TimeFormat = "dhms" | "decimal";
+
 const formatDate = (value: string) => {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
@@ -89,6 +108,19 @@ function durationHours(from: string, to: string, rate: number) {
   return +(hours * multiplier).toFixed(2);
 }
 
+function formatHours(hours: number, mode: TimeFormat) {
+  if (!Number.isFinite(hours)) return "—";
+  if (mode === "decimal") {
+    return `${(hours / 24).toFixed(3)} days`;
+  }
+  const totalSeconds = Math.round(hours * 3600);
+  const d = Math.floor(totalSeconds / 86400);
+  const h = Math.floor((totalSeconds % 86400) / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${d}d ${h}h ${m}m ${s}s`;
+}
+
 function currency(amount?: number | null, code = "USD") {
   if (amount === undefined || amount === null) return "—";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(amount);
@@ -104,9 +136,15 @@ const toInputValue = (value?: string | null) => {
 
 function AddEventForm({
   onAdd,
+  onUpdate,
+  editing,
+  clearEdit,
   loading,
 }: {
   onAdd: (payload: Omit<EventRow, "id" | "time_used">) => Promise<void>;
+  onUpdate: (id: string, payload: Omit<EventRow, "id" | "time_used">) => Promise<void>;
+  editing: EventRow | null;
+  clearEdit: () => void;
   loading: boolean;
 }) {
   const [deduction, setDeduction] = useState("");
@@ -115,6 +153,20 @@ function AddEventForm({
   const [rate, setRate] = useState(100);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (editing) {
+      setDeduction(editing.deduction_name);
+      setFrom(toInputValue(editing.from_datetime));
+      setTo(toInputValue(editing.to_datetime));
+      setRate(editing.rate_of_calculation);
+    } else {
+      setDeduction("");
+      setFrom("");
+      setTo("");
+      setRate(100);
+    }
+  }, [editing]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
@@ -122,16 +174,21 @@ function AddEventForm({
       setError("All fields are required.");
       return;
     }
-    await onAdd({
-      deduction_name: deduction,
-      from_datetime: from,
-      to_datetime: to,
-      rate_of_calculation: rate,
-    });
-    setDeduction("");
-    setFrom("");
-    setTo("");
-    setRate(100);
+    if (editing) {
+      await onUpdate(editing.id, {
+        deduction_name: deduction,
+        from_datetime: from,
+        to_datetime: to,
+        rate_of_calculation: rate,
+      });
+    } else {
+      await onAdd({
+        deduction_name: deduction,
+        from_datetime: from,
+        to_datetime: to,
+        rate_of_calculation: rate,
+      });
+    }
   };
 
   return (
@@ -174,8 +231,13 @@ function AddEventForm({
         <div className="flex items-center gap-2">
           <Button type="submit" disabled={loading}>
             <Plus className="w-4 h-4 mr-1" />
-            Add Event
+            {editing ? "Update Event" : "Add Event"}
           </Button>
+          {editing && (
+            <Button type="button" variant="ghost" onClick={clearEdit}>
+              Cancel
+            </Button>
+          )}
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
       </form>
@@ -186,9 +248,11 @@ function AddEventForm({
 function Summary({
   events,
   claim,
+  timeFormat,
 }: {
   events: EventRow[];
   claim: Claim;
+  timeFormat: TimeFormat;
 }) {
   const deductions = events.reduce((sum, ev) => sum + (ev.time_used || 0), 0);
 
@@ -228,13 +292,13 @@ function Summary({
       <div className="p-4 bg-gradient-to-br from-blue-50 to-white border border-blue-100 rounded-xl shadow-sm">
         <p className="text-sm text-blue-700 font-semibold">Allowed Time</p>
         <p className="text-3xl font-bold text-blue-900">
-          {allowedHours !== null ? `${allowedHours.toFixed(2)} hrs` : "—"}
+          {allowedHours !== null ? formatHours(allowedHours, timeFormat) : "—"}
         </p>
       </div>
       <div className="p-4 bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-xl shadow-sm">
         <p className="text-sm text-indigo-700 font-semibold">Used (Laytime - Deductions)</p>
         <p className="text-3xl font-bold text-indigo-900">
-          {usedHours !== null ? `${usedHours.toFixed(2)} hrs` : "—"}
+          {usedHours !== null ? formatHours(usedHours, timeFormat) : "—"}
         </p>
       </div>
       <div className="p-4 bg-gradient-to-br from-amber-50 to-white border border-amber-100 rounded-xl shadow-sm">
@@ -248,7 +312,7 @@ function Summary({
               : "text-slate-800"
           }`}
         >
-          {timeOver !== null ? `${timeOver.toFixed(2)} hrs` : "—"}
+          {timeOver !== null ? formatHours(timeOver, timeFormat) : "—"}
         </p>
       </div>
       <div className="p-4 bg-gradient-to-br from-emerald-50 to-white border border-emerald-100 rounded-xl shadow-sm">
@@ -273,10 +337,15 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   const [claimForm, setClaimForm] = useState<Partial<Claim>>({});
   const [events, setEvents] = useState<EventRow[]>([]);
   const [terms, setTerms] = useState<{ id: string; name: string }[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [audit, setAudit] = useState<AuditRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingClaim, setSavingClaim] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<EventRow | null>(null);
+  const [timeFormat, setTimeFormat] = useState<TimeFormat>("dhms");
 
   useEffect(() => {
     async function load() {
@@ -292,6 +361,10 @@ export default function CalculationPage({ params }: { params: { claimId: string 
         setClaimForm(json.claim);
         setEvents(json.events || []);
         if (json.terms) setTerms(json.terms);
+        if (json.audit) setAudit(json.audit);
+        const aRes = await fetch(`/api/claims/${params.claimId}/attachments`);
+        const aJson = await aRes.json();
+        if (aRes.ok && aJson.attachments) setAttachments(aJson.attachments);
       } catch (e: any) {
         setError(e.message || "Failed to load");
       } finally {
@@ -325,6 +398,52 @@ export default function CalculationPage({ params }: { params: { claimId: string 
     }
   };
 
+  const handleUpdate = async (id: string, payload: Omit<EventRow, "id" | "time_used">) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/claims/${params.claimId}/events`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...payload }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to update event");
+      const ev = json.event as EventRow;
+      setEvents((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, ...ev, time_used: ev.time_used ?? durationHours(ev.from_datetime, ev.to_datetime, ev.rate_of_calculation) } : p))
+      );
+      setEditingEvent(null);
+      router.refresh();
+    } catch (e: any) {
+      setError(e.message || "Failed to update event");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this event?")) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/claims/${params.claimId}/events`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Failed to delete event");
+      setEvents((prev) => prev.filter((e) => e.id !== id));
+      setEditingEvent(null);
+      router.refresh();
+    } catch (e: any) {
+      setError(e.message || "Failed to delete event");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const enhancedEvents = useMemo(
     () =>
       events.map((ev) => ({
@@ -338,6 +457,45 @@ export default function CalculationPage({ params }: { params: { claimId: string 
 
   const handleClaimFieldChange = (field: keyof Claim, value: any) => {
     setClaimForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const uploadAttachment = async (file: File, attachment_type: string) => {
+    setUploading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("attachment_type", attachment_type);
+      const res = await fetch(`/api/claims/${params.claimId}/attachments`, {
+        method: "POST",
+        body: form,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Upload failed");
+      setAttachments((prev) => [json.attachment, ...prev]);
+    } catch (e: any) {
+      setError(e.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const deleteAttachment = async (id: string) => {
+    if (!confirm("Delete this attachment?")) return;
+    try {
+      const res = await fetch(`/api/claims/${params.claimId}/attachments`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Delete failed");
+      }
+      setAttachments((prev) => prev.filter((a) => a.id !== id));
+    } catch (e: any) {
+      alert(e.message || "Delete failed");
+    }
   };
 
   const saveClaimDetails = async () => {
@@ -393,13 +551,27 @@ export default function CalculationPage({ params }: { params: { claimId: string 
             {claim.claim_reference}
           </h1>
         </div>
-        <div className="text-right text-sm text-gray-500">
-          <p>Demurrage rate: {currency(claim.demurrage_rate || 0, claim.demurrage_currency || "USD")}</p>
-          <p>Despatch rate: {claim.despatch_type === "percent" ? `${claim.despatch_rate_value || 0}% of demurrage` : currency(claim.despatch_rate_value || 0, claim.despatch_currency || claim.demurrage_currency || "USD")}</p>
+        <div className="flex items-start gap-6 text-sm text-gray-700">
+          <div className="text-right">
+            <p>Demurrage rate: {currency(claim.demurrage_rate || 0, claim.demurrage_currency || "USD")}</p>
+            <p>Despatch rate: {claim.despatch_type === "percent" ? `${claim.despatch_rate_value || 0}% of demurrage` : currency(claim.despatch_rate_value || 0, claim.despatch_currency || claim.demurrage_currency || "USD")}</p>
+          </div>
+          <div className="flex items-center gap-2 bg-slate-100 px-3 py-2 rounded-lg border border-slate-200">
+            <Label className="text-slate-700 text-xs">Time Format</Label>
+            <Select value={timeFormat} onValueChange={(v: any) => setTimeFormat(v)}>
+              <SelectTrigger className="w-36 h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dhms">DD.HH.MM.SS</SelectItem>
+                <SelectItem value="decimal">Decimal days</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
-      <Summary events={enhancedEvents} claim={{ ...claim, ...claimForm } as Claim} />
+      <Summary events={enhancedEvents} claim={{ ...claim, ...claimForm } as Claim} timeFormat={timeFormat} />
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 space-y-4">
         <div className="flex items-center justify-between">
@@ -645,9 +817,91 @@ export default function CalculationPage({ params }: { params: { claimId: string 
       </div>
 
       <div className="space-y-4">
-        <AddEventForm onAdd={handleAdd} loading={saving} />
+        <AddEventForm
+          onAdd={handleAdd}
+          onUpdate={handleUpdate}
+          editing={editingEvent}
+          clearEdit={() => setEditingEvent(null)}
+          loading={saving}
+        />
 
         <div className="border-t border-slate-200" />
+
+        <div className="p-4 border border-slate-200 bg-white shadow-sm rounded-xl space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-700">Attachments</p>
+              <p className="text-xs text-slate-500">Upload NOR or SOF files for this claim.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={uploading}
+                onClick={() => document.getElementById("nor-upload")?.click()}
+              >
+                Upload NOR
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={uploading}
+                onClick={() => document.getElementById("sof-upload")?.click()}
+              >
+                Upload SOF
+              </Button>
+              <input
+                id="nor-upload"
+                type="file"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) uploadAttachment(f, "nor");
+                  e.target.value = "";
+                }}
+              />
+              <input
+                id="sof-upload"
+                type="file"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) uploadAttachment(f, "sof");
+                  e.target.value = "";
+                }}
+              />
+            </div>
+          </div>
+          <div
+            className="mt-2 p-3 border-2 border-dashed border-slate-200 rounded-lg text-center text-sm text-slate-500"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const f = e.dataTransfer.files?.[0];
+              if (f) uploadAttachment(f, "other");
+            }}
+          >
+            Drag & drop files here
+          </div>
+          {attachments.length === 0 ? (
+            <p className="text-sm text-slate-500">No attachments yet.</p>
+          ) : (
+            <div className="divide-y">
+              {attachments.map((a) => (
+                <div key={a.id} className="py-2 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-semibold text-slate-800">{a.filename}</p>
+                    <p className="text-xs text-slate-500 uppercase">{a.attachment_type}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <a href={a.file_url} target="_blank" rel="noreferrer" className="text-ocean-700 text-sm">Download</a>
+                    <Button size="sm" variant="ghost" className="text-red-600" onClick={() => deleteAttachment(a.id)}>Delete</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="p-4 border border-slate-200 bg-white shadow-sm rounded-xl">
           <div className="flex items-center gap-2 mb-3">
@@ -662,7 +916,8 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                   <TableHead>From</TableHead>
                   <TableHead>To</TableHead>
                   <TableHead>Rate (%)</TableHead>
-                  <TableHead>Adjusted Hours</TableHead>
+                  <TableHead>Adjusted</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -679,12 +934,32 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                     <TableCell>{formatDate(ev.from_datetime)}</TableCell>
                     <TableCell>{formatDate(ev.to_datetime)}</TableCell>
                     <TableCell>{ev.rate_of_calculation}%</TableCell>
-                    <TableCell>{ev.time_used?.toFixed(2)} hrs</TableCell>
+                    <TableCell>{formatHours(ev.time_used || 0, timeFormat)}</TableCell>
+                    <TableCell className="text-right space-x-2">
+                      <Button size="sm" variant="ghost" onClick={() => setEditingEvent(ev)}>Edit</Button>
+                      <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleDelete(ev.id)}>Delete</Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </div>
+        </div>
+
+        <div className="p-4 border border-slate-200 bg-white shadow-sm rounded-xl">
+          <p className="text-sm font-semibold text-slate-700 mb-2">Event Audit Trail</p>
+          {audit.length === 0 ? (
+            <p className="text-sm text-slate-500">No audit entries yet.</p>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {audit.map((a) => (
+                <div key={a.id} className="text-xs text-slate-600 border-b pb-2">
+                  <p className="font-semibold text-slate-800">{a.action.toUpperCase()} · {formatDate(a.created_at)}</p>
+                  <p className="break-words text-slate-500">{a.data?.deduction_name || ""}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

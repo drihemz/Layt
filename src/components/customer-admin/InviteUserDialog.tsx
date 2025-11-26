@@ -22,7 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function InviteUserDialog() {
+export function InviteUserDialog({ adminFull, operatorFull }: { adminFull?: boolean; operatorFull?: boolean }) {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -68,7 +68,7 @@ export function InviteUserDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>Invite User</Button>
+        <Button disabled={adminFull && operatorFull} title={adminFull && operatorFull ? "Seat limits reached" : undefined}>Invite User</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px] bg-gray-900 border-gray-700 text-white">
         <form onSubmit={handleSubmit}>
@@ -107,8 +107,8 @@ export function InviteUserDialog() {
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent className="bg-gray-800 text-white">
-                  <SelectItem value="operator">Operator</SelectItem>
-                  <SelectItem value="customer_admin">Customer Admin</SelectItem>
+                  <SelectItem value="operator" disabled={operatorFull}>Operator</SelectItem>
+                  <SelectItem value="customer_admin" disabled={adminFull}>Customer Admin</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -72,12 +72,14 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
   const [laytimeEnd, setLaytimeEnd] = useState("");
   const [turnTimeMethod, setTurnTimeMethod] = useState("");
   const [selectedTermId, setSelectedTermId] = useState<string>("");
+  const [reversibleScope, setReversibleScope] = useState<"all_ports" | "load_only" | "discharge_only">("all_ports");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [ports, setPorts] = useState<{ id: string; name: string }[]>([]);
   const [portText, setPortText] = useState("");
   const [activeField, setActiveField] = useState<string>("");
   const [termText, setTermText] = useState("");
+  const [previewAllowed, setPreviewAllowed] = useState<string>("—");
 
   const resetForm = () => {
     setClaimRef("");
@@ -111,6 +113,8 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
     setPorts([]);
     setActiveField("");
     setTermText("");
+    setPreviewAllowed("—");
+    setReversibleScope("all_ports");
   };
 
   useEffect(() => {
@@ -181,6 +185,29 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
   const selectedVoyage = visibleVoyages.find((v) => v.id === voyageId);
   const superAdminDisabled = isSuperAdmin && !selectedTenantId;
 
+  useEffect(() => {
+    const cargoQty = selectedVoyage?.cargo_quantity || 0;
+    const rateVal = rateValue ? Number(rateValue) : 0;
+    let hours: number | null = null;
+    if (rateUnit === "fixed_duration" && fixedHours) {
+      hours = Number(fixedHours) || null;
+    } else if (rateVal > 0 && cargoQty > 0) {
+      if (rateUnit === "per_hour") {
+        hours = cargoQty / rateVal;
+      } else {
+        hours = (cargoQty / rateVal) * 24;
+      }
+    }
+    if (hours === null || Number.isNaN(hours)) {
+      setPreviewAllowed("—");
+    } else {
+      const d = Math.floor(hours / 24);
+      const h = Math.floor((hours % 24));
+      const m = Math.floor((hours * 60) % 60);
+      setPreviewAllowed(`${d}d ${h}h ${m}m`);
+    }
+  }, [selectedVoyage, rateValue, rateUnit, fixedHours]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
@@ -223,6 +250,7 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
         laytime_end: laytimeEnd || null,
         turn_time_method: turnTimeMethod || null,
         term_id: selectedTermId || null,
+        reversible_scope: reversibleScope || "all_ports",
       };
       if (isSuperAdmin) {
         payload.tenant_id = selectedTenantId;
@@ -329,13 +357,14 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
                 </div>
               </div>
 
-              {selectedVoyage && (
-                <div className="w-full border rounded-xl p-3 bg-slate-50 text-slate-900 space-y-1">
-                  <p className="font-semibold">Voyage: <span className="font-normal">{selectedVoyage.voyage_reference}</span></p>
-                  <p className="font-semibold">Cargo: <span className="font-normal">{selectedVoyage.cargo_names?.name || "—"} ({selectedVoyage.cargo_quantity || "—"})</span></p>
-                  <p className="font-semibold">Charter Party: <span className="font-normal">{selectedVoyage.charter_parties?.name || "—"}</span></p>
-                </div>
-              )}
+          {selectedVoyage && (
+            <div className="w-full border rounded-xl p-3 bg-slate-50 text-slate-900 space-y-1">
+              <p className="font-semibold">Voyage: <span className="font-normal">{selectedVoyage.voyage_reference}</span></p>
+              <p className="font-semibold">Cargo: <span className="font-normal">{selectedVoyage.cargo_names?.name || "—"} ({selectedVoyage.cargo_quantity || "—"})</span></p>
+              <p className="font-semibold">Charter Party: <span className="font-normal">{selectedVoyage.charter_parties?.name || "—"}</span></p>
+              <p className="text-sm text-slate-600">Allowed time preview: <span className="font-semibold">{previewAllowed}</span></p>
+            </div>
+          )}
             </div>
 
             <div className="grid grid-cols-12 gap-4">
@@ -404,11 +433,11 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
 
             <div className="space-y-4 border rounded-xl p-4 bg-slate-50">
               <p className="text-sm font-semibold text-slate-700">Rates & Reversibility</p>
-              <div className="grid grid-cols-12 gap-4 items-end">
-                <div className="col-span-12 md:col-span-6 space-y-1">
-                  <Label>Load/Discharge Rate</Label>
-                  <div className="flex gap-2">
-                    <Input
+            <div className="grid grid-cols-12 gap-4 items-end">
+              <div className="col-span-12 md:col-span-6 space-y-1">
+                <Label>Load/Discharge Rate</Label>
+                <div className="flex gap-2">
+                  <Input
                       type="number"
                       value={rateValue}
                       onChange={(e) => setRateValue(e.target.value)}
@@ -425,26 +454,40 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
                       </SelectContent>
                     </Select>
                   </div>
+              </div>
+              {rateUnit === "fixed_duration" && (
+                <div className="col-span-12 md:col-span-3 space-y-1">
+                  <Label>Fixed Hours</Label>
+                  <Input
+                    type="number"
+                    value={fixedHours}
+                    onChange={(e) => setFixedHours(e.target.value)}
+                    placeholder="e.g. 48"
+                  />
                 </div>
-                {rateUnit === "fixed_duration" && (
-                  <div className="col-span-12 md:col-span-3 space-y-1">
-                    <Label>Fixed Hours</Label>
-                    <Input
-                      type="number"
-                      value={fixedHours}
-                      onChange={(e) => setFixedHours(e.target.value)}
-                      placeholder="e.g. 48"
-                    />
+              )}
+              <div className="col-span-12 md:col-span-3 space-y-1">
+                <Label>Reversible?</Label>
+                <div className="flex items-center space-x-2">
+                  <Checkbox id="rev" checked={reversible} onCheckedChange={(c) => setReversible(!!c)} />
+                  <Label htmlFor="rev" className="text-sm">Reversible laytime</Label>
+                </div>
+                {reversible && (
+                  <div className="mt-2">
+                    <Select value={reversibleScope} onValueChange={(v: any) => setReversibleScope(v)}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Scope" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all_ports">All ports</SelectItem>
+                        <SelectItem value="load_only">Load ports only</SelectItem>
+                        <SelectItem value="discharge_only">Discharge ports only</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
-                <div className="col-span-12 md:col-span-3 space-y-1">
-                  <Label>Reversible?</Label>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="rev" checked={reversible} onCheckedChange={(c) => setReversible(!!c)} />
-                    <Label htmlFor="rev" className="text-sm">Reversible laytime</Label>
-                  </div>
-                </div>
               </div>
+            </div>
 
               <div className="grid grid-cols-12 gap-4">
                 <div className="col-span-12 md:col-span-6 space-y-1">

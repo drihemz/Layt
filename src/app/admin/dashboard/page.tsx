@@ -2,6 +2,7 @@ import { createServerClient } from "@/lib/supabase";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { ArrowUpRight } from "lucide-react";
 
 async function loadMetrics() {
   const supabase = createServerClient();
@@ -44,36 +45,42 @@ export default async function AdminDashboard() {
   }
 
   const metrics = await loadMetrics();
-
   const formatMoney = (cents: number) =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format((cents || 0) / 100);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Super Admin Dashboard</h1>
-          <p className="text-sm text-slate-600">High-level business and operations insights</p>
+    <div className="space-y-8">
+      <div className="bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-400 text-white rounded-3xl p-6 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-wide opacity-80">Super Admin</p>
+            <h1 className="text-3xl font-bold">Business Overview</h1>
+            <p className="text-sm opacity-80">Health of tenants, usage, and billing at a glance.</p>
+          </div>
+          <ArrowUpRight className="w-8 h-8 opacity-80" />
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card title="Tenants" value={metrics.tenants} />
-        <Card title="Users" value={metrics.users} />
-        <Card title="Voyages" value={metrics.voyages} />
-        <Card title="Claims" value={metrics.claims} />
-        <Card title="Invoices Due/Overdue" value={formatMoney(metrics.totalDue)} highlight />
-        <Card title="Invoices Paid" value={formatMoney(metrics.totalPaid)} />
+        <Card title="Tenants" value={metrics.tenants} accent="from-blue-500 to-cyan-400" />
+        <Card title="Users" value={metrics.users} accent="from-indigo-500 to-blue-400" />
+        <Card title="Voyages" value={metrics.voyages} accent="from-emerald-500 to-teal-400" />
+        <Card title="Claims" value={metrics.claims} accent="from-amber-500 to-orange-400" />
+        <Card title="Invoices Due/Overdue" value={formatMoney(metrics.totalDue)} accent="from-rose-500 to-orange-400" highlight />
+        <Card title="Invoices Paid" value={formatMoney(metrics.totalPaid)} accent="from-slate-600 to-slate-500" />
       </div>
     </div>
   );
 }
 
-function Card({ title, value, highlight }: { title: string; value: string | number; highlight?: boolean }) {
+function Card({ title, value, accent, highlight }: { title: string; value: string | number; accent: string; highlight?: boolean }) {
   return (
-    <div className={`p-4 rounded-xl border shadow-sm ${highlight ? "bg-amber-50 border-amber-200" : "bg-white border-slate-200"}`}>
-      <p className="text-xs uppercase tracking-wide text-slate-500">{title}</p>
-      <p className="text-2xl font-bold text-slate-900 mt-1">{value}</p>
+    <div className={`p-4 rounded-2xl border shadow-sm bg-white relative overflow-hidden`}>
+      <div className={`absolute inset-0 bg-gradient-to-br ${accent} opacity-10`} />
+      <div className="relative">
+        <p className="text-xs uppercase tracking-wide text-slate-500">{title}</p>
+        <p className={`text-2xl font-bold mt-1 ${highlight ? "text-rose-600" : "text-slate-900"}`}>{value}</p>
+      </div>
     </div>
   );
 }

@@ -25,6 +25,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Session } from "next-auth";
 import { Textarea } from "../ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Lookups = {
   parties: any[];

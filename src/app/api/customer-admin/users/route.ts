@@ -4,6 +4,27 @@ import { authOptions } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 import bcrypt from "bcryptjs";
 
+async function getTenantPlanSeats(supabase: ReturnType<typeof createServerClient>, tenantId: string) {
+  const { data, error } = await supabase
+    .from("tenant_plans")
+    .select("seats_admins, seats_operators")
+    .eq("tenant_id", tenantId)
+    .eq("status", "active")
+    .single();
+  if (error) return null;
+  return data;
+}
+
+async function countByRole(supabase: ReturnType<typeof createServerClient>, tenantId: string, role: string) {
+  const { count } = await supabase
+    .from("users")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
+    .eq("role", role)
+    .eq("is_active", true);
+  return count || 0;
+}
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
 
@@ -31,7 +52,22 @@ export async function POST(req: Request) {
     const supabase = createServerClient();
     const tenantId = session.user.tenantId;
 
-    // 3. Create User
+    // 3. Enforce seat limits if plan defines them
+    const seats = await getTenantPlanSeats(supabase, tenantId);
+    if (role === "customer_admin" && seats?.seats_admins !== null && seats?.seats_admins !== undefined) {
+      const adminCount = await countByRole(supabase, tenantId, "customer_admin");
+      if (adminCount >= seats.seats_admins) {
+        return NextResponse.json({ error: "Admin seat limit reached for this tenant plan." }, { status: 403 });
+      }
+    }
+    if (role === "operator" && seats?.seats_operators !== null && seats?.seats_operators !== undefined) {
+      const opCount = await countByRole(supabase, tenantId, "operator");
+      if (opCount >= seats.seats_operators) {
+        return NextResponse.json({ error: "Operator seat limit reached for this tenant plan." }, { status: 403 });
+      }
+    }
+
+    // 4. Create User
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const { data: newUser, error: userError } = await supabase.from("users").insert({
@@ -51,7 +87,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
     }
 
-    // 4. Success
+    // 5. Success
     return NextResponse.json(newUser, { status: 201 });
     
   } catch (error) {

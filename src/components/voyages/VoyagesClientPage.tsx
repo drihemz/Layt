@@ -25,6 +25,8 @@ import { CreateVoyageDialog } from "@/components/voyages/CreateVoyageDialog";
 import { useEffect } from 'react';
 import Link from "next/link";
 import { EditVoyageDialog } from "./EditVoyageDialog";
+import { PortCallsDialog } from "./PortCallsDialog";
+import { PortCallsDialog } from "./PortCallsDialog";
 
 type Lookups = {
   parties: any[];
@@ -62,17 +64,17 @@ function TenantSelector({ currentTenantId }: { currentTenantId?: string }) {
 
   const handleSelect = (tenantId?: string) => {
     const params = new URLSearchParams(searchParams);
-    if (tenantId) params.set('tenantId', tenantId); else params.delete('tenantId');
+    if (tenantId && tenantId !== "all") params.set('tenantId', tenantId); else params.delete('tenantId');
     router.push(`${window.location.pathname}?${params.toString()}`);
   };
 
   return (
-    <Select value={currentTenantId || ''} onValueChange={(v) => handleSelect(v || undefined)}>
+    <Select value={currentTenantId || 'all'} onValueChange={(v) => handleSelect(v || undefined)}>
       <SelectTrigger className="w-48 bg-white">
         <SelectValue placeholder="All tenants" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="">All Tenants</SelectItem>
+        <SelectItem value="all">All Tenants</SelectItem>
         {tenants.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
       </SelectContent>
     </Select>
@@ -173,6 +175,9 @@ export default function VoyagesClientPage({ voyages, lookups, tenantIdFilter, pa
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild>
                           <EditVoyageDialog voyage={voyage} lookups={lookups} onSaved={() => router.refresh()} />
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <PortCallsDialog voyageId={voyage.id} onChange={() => router.refresh()} />
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={async () => {

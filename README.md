@@ -81,43 +81,18 @@ npm run dev
   - Validate the user's session server-side (NextAuth) and retrieve their `tenant_id`.
   - Use the service-role client only after server-side validation and apply `tenant_id` when mutating lookup tables.
 
-## Testing & next work
+## Current Highlights (see TODO.md for full list)
+- Voyages: create/edit/delete, type-ahead lookups + request-new, plan limits; port calls management (multi-port legs with ETA/ETD/activity/status/sequence).
+- Claims: extended laytime fields, calculator with SOF events (edit/delete), audit trail, attachments (NOR/SOF), time-format toggle, reversible scope (load-only/discharge-only/all ports), allowed-time preview in create.
+- Data Management: tenant/public lookups, plan-based tab gating, request-new flow.
+- Plans/Billing: plan limits (voyages/claims/month/seats), tenant plan assignment, invoices list/mark paid, usage/limits displayed, seat enforcement on user creation.
+- Admin: dashboards, tenant page with usage vs limits, plans editable with data tab toggles.
 
-- There are currently no automated tests in the repo. Recommended next steps:
-  - Add basic unit/integration tests for the voyages list and create flow.
-  - Add a protected API auth middleware to secure server endpoints.
-
-## Contributing
-
-- Branch from `main`, open PRs with a short description and link to relevant issue.
-
----
-
-If you want, I can:
-- Add runnable dev instructions to `package.json` (scripts)
-- Harden the `/api/lookup` route with NextAuth session checks
-- Add a short troubleshooting section for the most common Supabase/RLS errors
-
-If you'd like any of those, tell me which and I'll implement them.
-# Laytime and Demurrage Platform
-
-**Multi-tenant SaaS tool for laytime and demurrage calculation and management (Next.js, Supabase, Tailwind).**
-
----
-
-## Project Status
-
-For a detailed list of completed tasks and the project roadmap, please see the [TODO.md](TODO.md) file.
-
----
-
-## What Has Been Accomplished
-
-### Core Foundation
-- Project initialized with Next.js (App Router) and TypeScript.
-- Authentication: NextAuth.js with Supabase, safe multi-tenant session context, roles: `super_admin`, `customer_admin`, and `operator` (user isolation).
-- Multi-tenant database: All tables filtered by tenant (with strict policies and helpers), role-based authorization middleware.
-- Modern UI/UX: Maritime-inspired visuals (blue/teal gradients, wave pattern, glass effect, gradients, animated shimmer, custom sidebar, dashboard widgets).
+## Pending / Planned (summary)
+- PDF export of laytime statement (pending dependency install).
+- Voyage port calls UI polish and claims-from-port-calls workflow.
+- Holidays/terms library, bulk import/dedupe for lookups.
+- Automated invoice scheduler; deeper laytime engine, collaboration, analytics.
 - Supabase database schema: All tables and relations for tenants, users, voyages, claims, calculation events, lookup (vessels, charterers, cargo, etc.)
 - Migration scripts: Run migrations via Supabase Management API with your access token.
 - Scripts to clear all data, and to create your first super admin user.

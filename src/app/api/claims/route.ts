@@ -3,6 +3,17 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 
+async function getTenantPlan(supabase: ReturnType<typeof createServerClient>, tenantId: string) {
+  const { data, error } = await supabase
+    .from("tenant_plans")
+    .select("plan_id, plans(max_claims, max_claims_per_month)")
+    .eq("tenant_id", tenantId)
+    .eq("status", "active")
+    .single();
+  if (error) return null;
+  return data;
+}
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
 
@@ -22,10 +33,12 @@ export async function POST(req: Request) {
       operation_type,
       port_name,
       country,
+      port_call_id,
       load_discharge_rate,
       load_discharge_rate_unit,
       fixed_rate_duration_hours,
       reversible = false,
+      reversible_scope,
       demurrage_rate,
       demurrage_currency,
       demurrage_after_hours,
@@ -79,12 +92,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Voyage does not belong to tenant" }, { status: 403 });
     }
 
+    // Enforce claim limits from plan
+    const tenantPlan = await getTenantPlan(supabase, tenantIdToUse);
+    if (tenantPlan?.plans?.max_claims) {
+      const { count } = await supabase
+        .from("claims")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantIdToUse);
+      if ((count || 0) >= tenantPlan.plans.max_claims) {
+        return NextResponse.json({ error: "Claim limit reached for this tenant plan." }, { status: 403 });
+      }
+    }
+    if (tenantPlan?.plans?.max_claims_per_month) {
+      const start = new Date(); start.setDate(1); start.setHours(0,0,0,0);
+      const end = new Date(start); end.setMonth(start.getMonth() + 1);
+      const { count } = await supabase
+        .from("claims")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantIdToUse)
+        .gte("created_at", start.toISOString())
+        .lt("created_at", end.toISOString());
+      if ((count || 0) >= tenantPlan.plans.max_claims_per_month) {
+        return NextResponse.json({ error: "Monthly claim limit reached for this tenant plan." }, { status: 403 });
+      }
+    }
+
     const generatedRef = claim_reference || `CLM-${Date.now() % 100000}`;
 
     const insertPayload = {
       claim_reference: generatedRef,
       tenant_id: tenantIdToUse,
       voyage_id,
+      port_call_id: port_call_id || null,
       claim_status,
       created_by: userId,
       operation_type,
@@ -94,6 +133,7 @@ export async function POST(req: Request) {
       load_discharge_rate_unit,
       fixed_rate_duration_hours,
       reversible,
+      reversible_scope: reversible_scope || "all_ports",
       demurrage_rate,
       demurrage_currency,
       demurrage_after_hours,

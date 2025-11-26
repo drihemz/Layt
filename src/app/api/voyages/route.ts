@@ -3,6 +3,17 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 
+async function getTenantPlan(supabase: ReturnType<typeof createServerClient>, tenantId: string) {
+  const { data, error } = await supabase
+    .from("tenant_plans")
+    .select("plan_id, seats_admins, seats_operators, plans(max_voyages)")
+    .eq("tenant_id", tenantId)
+    .eq("status", "active")
+    .single();
+  if (error) return null;
+  return data;
+}
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
 
@@ -44,6 +55,19 @@ export async function POST(req: Request) {
     };
     
     const supabase = createServerClient();
+
+    // Enforce voyage limit if plan set
+    const tenantPlan = await getTenantPlan(supabase, tenantId);
+    if (tenantPlan?.plans?.max_voyages) {
+      const { count } = await supabase
+        .from("voyages")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId);
+      if ((count || 0) >= tenantPlan.plans.max_voyages) {
+        return NextResponse.json({ error: "Voyage limit reached for this tenant plan." }, { status: 403 });
+      }
+    }
+
     const { data, error } = await supabase
       .from("voyages")
       .insert(voyageData)
