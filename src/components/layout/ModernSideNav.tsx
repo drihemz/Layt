@@ -33,6 +33,9 @@ const adminNavigation = [
 const superAdminNavigation = [
   { name: "Tenants", href: "/admin", icon: Building2 },
   { name: "All Users", href: "/admin/users", icon: Users },
+  { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+  { name: "Plans", href: "/admin/plans", icon: Settings },
+  { name: "Invoices", href: "/admin/invoices", icon: FileText },
   { name: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
@@ -41,12 +44,16 @@ export function ModernSideNav() {
   const { data: session } = useSession();
   const role = session?.user?.role;
 
+  if (pathname?.startsWith("/auth")) {
+    return null;
+  }
+
   const isSuperAdmin = role === "super_admin";
   const isCustomerAdmin = role === "customer_admin";
 
 
   return (
-    <div className="flex h-full flex-col bg-gradient-to-b from-blue-100 via-cyan-100 to-teal-100 text-blue-900 relative overflow-hidden shadow-xl border-r border-blue-200">
+    <div className="w-full flex-none md:w-64 flex h-full flex-col bg-gradient-to-b from-blue-100 via-cyan-100 to-teal-100 text-blue-900 relative overflow-hidden shadow-xl border-r border-blue-200">
       {/* Background Pattern */}
       <div className="absolute inset-0 wave-pattern opacity-10"></div>
       {/* Animated Background Elements */}

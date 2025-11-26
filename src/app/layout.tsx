@@ -21,9 +21,7 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50 min-h-screen text-[color:hsl(var(--foreground))]`}>
         <Providers>
           <div className="flex h-screen flex-col md:flex-row md:overflow-hidden">
-            <div className="w-full flex-none md:w-64">
-              <ModernSideNav />
-            </div>
+            <ModernSideNav />
             <div className="flex-grow md:overflow-y-auto bg-gradient-to-br from-slate-50 via-blue-50/30 to-cyan-50/30">
               <div className="p-6 md:p-8 lg:p-12">
                 {children}

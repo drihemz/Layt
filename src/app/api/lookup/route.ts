@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     const { session, role, tenantId } = authResult
 
     const body = await req.json()
-    const { table, ...dataToInsert } = body // Extract table and the rest of the data
+    const { table, holidays, ...dataToInsert } = body // Extract table, holidays (for terms), and the rest of the data
     const targetTable = (TABLE_MAP as any)[table]
     if (!targetTable) return NextResponse.json({ error: 'invalid table' }, { status: 400 })
 
@@ -64,6 +64,22 @@ export async function POST(req: Request) {
       console.error(`Error inserting into ${targetTable}:`, error);
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    // Handle term holidays if provided
+    if (targetTable === 'terms' && holidays && Array.isArray(holidays) && data?.id) {
+      const cleaned = holidays
+        .filter((h: any) => h && h.holiday_name && h.holiday_start && h.holiday_end)
+        .map((h: any) => ({
+          term_id: data.id,
+          holiday_name: h.holiday_name,
+          holiday_start: h.holiday_start,
+          holiday_end: h.holiday_end,
+        }));
+      if (cleaned.length > 0) {
+        await supabase.from("term_holidays").insert(cleaned);
+      }
+    }
+
     return NextResponse.json({ data })
   } catch (err: any) {
     console.error("API POST error:", err);
@@ -73,9 +89,13 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    const authResult = await authorizeRequest(req as any);
-    if (authResult instanceof NextResponse) return authResult;
-    const { session, role, tenantId } = authResult;
+    // Allow all authenticated users (including operators) to read lookup data;
+    // writes are still restricted in POST/PUT/DELETE.
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { role, tenantId } = session.user;
 
     const url = new URL(req.url);
     const qTenantId = url.searchParams.get('tenant_id');
@@ -88,20 +108,17 @@ export async function GET(req: Request) {
 
     // If targetTenantId is provided, include tenant-specific rows + public
     const supabase = createServerClient();
-    const tables = ['parties', 'vessels', 'ports', 'cargo_names', 'charter_parties'];
+    const tables = ['parties', 'vessels', 'ports', 'cargo_names', 'charter_parties', 'terms'];
     const results: Record<string, any[]> = {};
 
     for (const t of tables) {
-      let q;
-      if (role === 'super_admin' && !targetTenantId) {
-        q = supabase.from(t).select('*');
-      } else {
-        q = supabase
-          .from(t)
-          .select('*')
-          .or(targetTenantId ? `tenant_id.eq.${targetTenantId},is_public.eq.true` : `is_public.eq.true`);
-      }
-      const { data, error } = await q;
+      const filter = targetTenantId ? `tenant_id.eq.${targetTenantId},is_public.eq.true` : "is_public.eq.true";
+      const query =
+        role === "super_admin" && !targetTenantId
+          ? supabase.from(t).select("*")
+          : supabase.from(t).select("*").or(filter);
+
+      const { data, error } = await query;
       if (error) {
         console.error(`Error fetching ${t}:`, error);
         results[t] = [];
@@ -124,7 +141,7 @@ export async function PUT(req: Request) {
     const { session, role, tenantId } = authResult
 
     const body = await req.json()
-    const { table, id, ...dataToUpdate } = body // Extract table, id, and the rest of the data
+    const { table, id, holidays, ...dataToUpdate } = body // Extract table, id, holidays, and the rest of the data
     const targetTable = (TABLE_MAP as any)[table]
     if (!targetTable) return NextResponse.json({ error: 'invalid table' }, { status: 400 })
     if (!id) return NextResponse.json({ error: 'id required for update' }, { status: 400 })
@@ -167,6 +184,23 @@ export async function PUT(req: Request) {
       console.error(`Error updating ${targetTable}:`, error);
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    // Handle term holidays replace
+    if (targetTable === 'terms' && holidays && Array.isArray(holidays)) {
+      await supabase.from("term_holidays").delete().eq("term_id", id);
+      const cleaned = holidays
+        .filter((h: any) => h && h.holiday_name && h.holiday_start && h.holiday_end)
+        .map((h: any) => ({
+          term_id: id,
+          holiday_name: h.holiday_name,
+          holiday_start: h.holiday_start,
+          holiday_end: h.holiday_end,
+        }));
+      if (cleaned.length > 0) {
+        await supabase.from("term_holidays").insert(cleaned);
+      }
+    }
+
     return NextResponse.json({ ok: true })
   } catch (err: any) {
     console.error("API PUT error:", err);

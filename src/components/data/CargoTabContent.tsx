@@ -15,7 +15,7 @@ import { CargoDialog } from "./CargoDialog";
 interface Cargo {
   id: string;
   name: string;
-  tenants: { name: string } | null;
+  tenantName?: string | null;
 }
 
 export default function CargoTabContent({ cargoNames, session }: { cargoNames: Cargo[], session: Session }) {
@@ -42,7 +42,7 @@ export default function CargoTabContent({ cargoNames, session }: { cargoNames: C
               <TableRow key={cargo.id}>
                 <TableCell>{cargo.name}</TableCell>
                 <TableCell>{(cargo as any).is_public ? 'Yes' : 'No'}</TableCell>
-                <TableCell>{cargo.tenants?.name || ((cargo as any).is_public ? 'Public' : '')}</TableCell>
+                <TableCell>{cargo.tenantName || ((cargo as any).is_public ? 'Public' : '')}</TableCell>
                 <TableCell className="text-right">
                   <CargoDialog cargo={cargo} session={session}>
                     <Button variant="ghost" size="sm">Edit</Button>

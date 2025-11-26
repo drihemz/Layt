@@ -60,7 +60,8 @@ export function CharterPartyDialog({ charterParty, children, session }: CharterP
 
   useEffect(() => {
     if (isEditMode) {
-      setFormData(charterParty);
+      const { tenantName, ...rest } = charterParty as any;
+      setFormData(rest);
       setIsPublic(charterParty?.is_public || false);
       if (isSuperAdmin && charterParty?.tenant_id) {
         setSelectedTenantId(charterParty.tenant_id);
@@ -117,7 +118,9 @@ export function CharterPartyDialog({ charterParty, children, session }: CharterP
     }
 
     const processedData = Object.fromEntries(
-      Object.entries(formData).map(([key, value]) => [key, value === '' ? null : value])
+      Object.entries(formData)
+        .filter(([key]) => key !== 'tenantName')
+        .map(([key, value]) => [key, value === '' ? null : value])
     );
 
     const payload: any = {

@@ -79,7 +79,8 @@ export function PartyDialog({ party, children, session }: PartyDialogProps) {
 
   useEffect(() => {
     if (isEditMode) {
-      setFormData(party);
+      const { tenantName, ...rest } = party as any;
+      setFormData(rest);
       setIsPublic(party?.is_public || false);
       if (isSuperAdmin && party?.tenant_id) {
         setSelectedTenantId(party.tenant_id);
@@ -139,11 +140,21 @@ export function PartyDialog({ party, children, session }: PartyDialogProps) {
       setLoading(false);
       return;
     }
+
+    const name = formData.name?.trim() || "";
+    if (!name) {
+      setError("Name is required.");
+      setLoading(false);
+      return;
+    }
     
     // Convert empty strings to null for the DB
     const processedData = Object.fromEntries(
-      Object.entries(formData).map(([key, value]) => [key, value === '' ? null : value])
+      Object.entries(formData)
+        .filter(([key]) => key !== 'tenantName')
+        .map(([key, value]) => [key, value === '' ? null : value])
     );
+    processedData.name = name;
     
     const payload: any = {
       table: "parties",

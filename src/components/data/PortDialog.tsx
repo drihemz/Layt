@@ -110,10 +110,20 @@ export function PortDialog({ port, children, session }: PortDialogProps) {
       setLoading(false);
       return;
     }
-    
+
+    const name = formData.name?.trim() || "";
+    if (!name) {
+      setError("Name is required.");
+      setLoading(false);
+      return;
+    }
+
     const processedData = Object.fromEntries(
-      Object.entries(formData).map(([key, value]) => [key, value === '' ? null : value])
+      Object.entries(formData)
+        .filter(([key]) => key !== 'tenantName')
+        .map(([key, value]) => [key, value === '' ? null : value])
     );
+    processedData.name = name;
 
     const payload: any = {
       table: "ports",

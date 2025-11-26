@@ -1,0 +1,34 @@
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { createServerClient } from "@/lib/supabase";
+
+async function requireSuperAdmin() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user || session.user.role !== "super_admin") {
+    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+  }
+  return { supabase: createServerClient() };
+}
+
+export async function GET() {
+  const { error, supabase } = await requireSuperAdmin();
+  if (error) return error;
+  const { data, error: err } = await supabase
+    .from("invoices")
+    .select("*, tenants(name), plans(name)")
+    .order("created_at", { ascending: false });
+  if (err) return NextResponse.json({ error: err.message }, { status: 500 });
+  return NextResponse.json({ invoices: data || [] });
+}
+
+export async function PUT(req: Request) {
+  const { error, supabase } = await requireSuperAdmin();
+  if (error) return error;
+  const body = await req.json();
+  const { id, status } = body;
+  if (!id || !status) return NextResponse.json({ error: "id and status required" }, { status: 400 });
+  const { data, error: err } = await supabase.from("invoices").update({ status }).eq("id", id).select().single();
+  if (err) return NextResponse.json({ error: err.message }, { status: 500 });
+  return NextResponse.json({ invoice: data });
+}

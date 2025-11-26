@@ -20,7 +20,7 @@ interface Vessel {
   vessel_type: string;
   flag: string;
   dwt: number;
-  tenants: { name: string } | null;
+  tenantName?: string | null;
 }
 
 interface Party {
@@ -63,7 +63,7 @@ export default function VesselsTabContent({ vessels, parties, session }: { vesse
                 <TableCell>{vessel.flag}</TableCell>
                 <TableCell>{vessel.dwt}</TableCell>
                 <TableCell>{vessel.is_public ? 'Yes' : 'No'}</TableCell>
-                <TableCell>{vessel.tenants?.name || (vessel.is_public ? 'Public' : '')}</TableCell>
+                <TableCell>{vessel.tenantName || (vessel.is_public ? 'Public' : '')}</TableCell>
                 <TableCell className="text-right">
                   <VesselDialog vessel={vessel} parties={parties} session={session}>
                     <Button variant="ghost" size="sm">Edit</Button>

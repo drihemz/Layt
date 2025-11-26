@@ -1,10 +1,10 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -19,187 +19,613 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-  } from "@/components/ui/popover"
-import { cn } from "@/lib/utils";
-import { CalendarIcon } from "lucide-react";
-import { format } from "date-fns";
-import { useState } from "react";
-import { DateRange } from "react-day-picker";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useSession } from "next-auth/react";
 
-export function CreateClaimDialog() {
-    const [date, setDate] = useState<DateRange | undefined>()
+type Voyage = {
+  id: string;
+  voyage_reference: string;
+  tenant_id?: string | null;
+  cargo_quantity?: number | null;
+  cargo_names?: { name: string | null } | null;
+  charter_parties?: { name: string | null } | null;
+};
+type Tenant = { id: string; name: string };
+type Term = { id: string; name: string };
+
+interface Props {
+  voyages: Voyage[];
+  tenantId?: string | null;
+  isSuperAdmin: boolean;
+  terms: Term[];
+}
+
+export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Props) {
+  useSession(); // keep session provider engaged if needed later
+  const [open, setOpen] = useState(false);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [selectedTenantId, setSelectedTenantId] = useState<string>(tenantId || "");
+
+  const [claimRef, setClaimRef] = useState("");
+  const [voyageId, setVoyageId] = useState("");
+  const [status, setStatus] = useState("draft");
+  const [operationType, setOperationType] = useState<"load" | "discharge" | "">("");
+  const [portName, setPortName] = useState("");
+  const [country, setCountry] = useState("");
+  const [rateValue, setRateValue] = useState<number | string>("");
+  const [rateUnit, setRateUnit] = useState<"per_day" | "per_hour" | "fixed_duration">("per_day");
+  const [fixedHours, setFixedHours] = useState<number | string>("");
+  const [reversible, setReversible] = useState(false);
+  const [demRate, setDemRate] = useState<number | string>("");
+  const [demCurrency, setDemCurrency] = useState("USD");
+  const [demAfterHours, setDemAfterHours] = useState<number | string>("");
+  const [demAfterRate, setDemAfterRate] = useState<number | string>("");
+  const [despatchType, setDespatchType] = useState<"amount" | "percent">("amount");
+  const [despatchRate, setDespatchRate] = useState<number | string>("");
+  const [despatchCurrency, setDespatchCurrency] = useState("USD");
+  const [laycanStart, setLaycanStart] = useState("");
+  const [laycanEnd, setLaycanEnd] = useState("");
+  const [norAt, setNorAt] = useState("");
+  const [loadStart, setLoadStart] = useState("");
+  const [loadEnd, setLoadEnd] = useState("");
+  const [laytimeStart, setLaytimeStart] = useState("");
+  const [laytimeEnd, setLaytimeEnd] = useState("");
+  const [turnTimeMethod, setTurnTimeMethod] = useState("");
+  const [selectedTermId, setSelectedTermId] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [ports, setPorts] = useState<{ id: string; name: string }[]>([]);
+  const [portText, setPortText] = useState("");
+  const [activeField, setActiveField] = useState<string>("");
+  const [termText, setTermText] = useState("");
+
+  const resetForm = () => {
+    setClaimRef("");
+    setVoyageId("");
+    setStatus("draft");
+    setOperationType("");
+    setPortName("");
+    setCountry("");
+    setRateValue("");
+    setRateUnit("per_day");
+    setFixedHours("");
+    setReversible(false);
+    setDemRate("");
+    setDemCurrency("USD");
+    setDemAfterHours("");
+    setDemAfterRate("");
+    setDespatchType("amount");
+    setDespatchRate("");
+    setDespatchCurrency("USD");
+    setLaycanStart("");
+    setLaycanEnd("");
+    setNorAt("");
+    setLoadStart("");
+    setLoadEnd("");
+    setLaytimeStart("");
+    setLaytimeEnd("");
+    setTurnTimeMethod("");
+    setSelectedTermId("");
+    setError(null);
+    setPortText("");
+    setPorts([]);
+    setActiveField("");
+    setTermText("");
+  };
+
+  useEffect(() => {
+    if (isSuperAdmin && open) {
+      fetch("/api/admin/tenants")
+        .then((res) => (res.ok ? res.json() : Promise.reject()))
+        .then((data) => setTenants(data.tenants || []))
+        .catch(() => setTenants([]));
+    }
+  }, [isSuperAdmin, open]);
+
+  useEffect(() => {
+    if (tenantId) setSelectedTenantId(tenantId);
+  }, [tenantId]);
+
+  useEffect(() => {
+    async function fetchPorts() {
+      try {
+        const res = await fetch("/api/lookup");
+        const json = await res.json();
+        if (res.ok && json.data?.ports) {
+          setPorts(json.data.ports);
+        }
+      } catch (e) {
+        console.error("Failed to load ports", e);
+      }
+    }
+    if (open) {
+      fetchPorts();
+    }
+  }, [open]);
+
+  const requestNew = async (name: string) => {
+    if (!name) return;
+    try {
+      const res = await fetch("/api/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_type: "ports", name }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to submit request");
+      alert("Request sent to admin for approval.");
+    } catch (e: any) {
+      alert(e.message || "Request failed");
+    }
+  };
+
+  const requestNewTerm = async (name: string) => {
+    if (!name) return;
+    try {
+      const res = await fetch("/api/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_type: "terms", name }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to submit request");
+      alert("Term request sent to admin for approval.");
+    } catch (e: any) {
+      alert(e.message || "Request failed");
+    }
+  };
+
+  const visibleVoyages = isSuperAdmin && selectedTenantId
+    ? voyages.filter((v: any) => v.tenant_id === selectedTenantId || !v.tenant_id)
+    : voyages;
+  const selectedVoyage = visibleVoyages.find((v) => v.id === voyageId);
+  const superAdminDisabled = isSuperAdmin && !selectedTenantId;
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!voyageId) {
+      setError("Voyage is required.");
+      return;
+    }
+    if (isSuperAdmin && !selectedTenantId) {
+      setError("Select a tenant for this claim.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const payload: any = {
+        voyage_id: voyageId,
+        claim_reference: claimRef || undefined,
+        claim_status: status,
+        operation_type: operationType || undefined,
+        port_name: portName || undefined,
+        country: country || undefined,
+        load_discharge_rate: rateValue ? Number(rateValue) : null,
+        load_discharge_rate_unit: rateUnit,
+        fixed_rate_duration_hours: rateUnit === "fixed_duration" && fixedHours ? Number(fixedHours) : null,
+        reversible,
+        demurrage_rate: demRate ? Number(demRate) : null,
+        demurrage_currency: demCurrency,
+        demurrage_after_hours: demAfterHours ? Number(demAfterHours) : null,
+        demurrage_rate_after: demAfterRate ? Number(demAfterRate) : null,
+        despatch_type: despatchType,
+        despatch_rate_value: despatchRate ? Number(despatchRate) : null,
+        despatch_currency: despatchCurrency,
+        laycan_start: laycanStart || null,
+        laycan_end: laycanEnd || null,
+        nor_tendered_at: norAt || null,
+        loading_start_at: loadStart || null,
+        loading_end_at: loadEnd || null,
+        laytime_start: laytimeStart || null,
+        laytime_end: laytimeEnd || null,
+        turn_time_method: turnTimeMethod || null,
+        term_id: selectedTermId || null,
+      };
+      if (isSuperAdmin) {
+        payload.tenant_id = selectedTenantId;
+      }
+
+      const res = await fetch("/api/claims", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to create claim");
+
+      setOpen(false);
+      resetForm();
+      setSelectedTenantId(tenantId || "");
+      window.location.reload();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <Dialog>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        setOpen(isOpen);
+        if (isOpen) {
+          resetForm();
+          if (tenantId) setSelectedTenantId(tenantId);
+        }
+      }}
+    >
       <DialogTrigger asChild>
-        <Button>Create Claim</Button>
+        <Button disabled={superAdminDisabled}>Create Claim</Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader>
-          <DialogTitle>Create Claim</DialogTitle>
-          <DialogDescription>
-            Enter the details of the new claim.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="voyage" className="text-right">
-              Voyage*
-            </Label>
-            <Select>
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select a voyage" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="voyage-a">VOY-001</SelectItem>
-                <SelectItem value="voyage-b">VOY-002</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="counter-party" className="text-right">
-              Counter Party*
-            </Label>
-            <Select>
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select a counter party" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cp-a">Counter Party 1</SelectItem>
-                <SelectItem value="cp-b">Counter Party 2</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="port" className="text-right">
-              Port Name*
-            </Label>
-            <Select>
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select a port" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="port-a">Port of Rotterdam</SelectItem>
-                <SelectItem value="port-b">Port of Singapore</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="demurrage-rate" className="text-right">
-              Demurrage Rate
-            </Label>
-            <Input id="demurrage-rate" className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="despatch-rate" className="text-right">
-              Despatch Rate
-            </Label>
-            <Input id="despatch-rate" className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="activity" className="text-right">
-              Activity
-            </Label>
-            <Select>
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select an activity" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="loading">Loading</SelectItem>
-                <SelectItem value="discharging">Discharging</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="load-discharge-rate" className="text-right">
-              Load/Discharge Rate
-            </Label>
-            <Input id="load-discharge-rate" className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="terms" className="text-right">
-              Terms Used*
-            </Label>
-            <Select>
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select terms" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="terms-a">SHINC</SelectItem>
-                <SelectItem value="terms-b">WIPON</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="cargo-quantity" className="text-right">
-              Cargo Quantity
-            </Label>
-            <Input id="cargo-quantity" className="col-span-3" />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="cargo-name" className="text-right">
-              Cargo Name*
-            </Label>
-            <Select>
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select a cargo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cargo-a">Iron Ore</SelectItem>
-                <SelectItem value="cargo-b">Coal</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="laycan" className="text-right">
-              Laycan
-            </Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  id="date"
-                  variant={"outline"}
-                  className={cn(
-                    "w-[300px] justify-start text-left font-normal",
-                    !date && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {date?.from ? (
-                    date.to ? (
-                      <>
-                        {format(date.from, "LLL dd, y")} -{" "}
-                        {format(date.to, "LLL dd, y")}
-                      </>
-                    ) : (
-                      format(date.from, "LLL dd, y")
-                    )
-                  ) : (
-                    <span>Pick a date</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  initialFocus
-                  mode="range"
-                  defaultMonth={date?.from}
-                  selected={date}
-                  onSelect={setDate}
-                  numberOfMonths={2}
+      <DialogContent className="sm:max-w-5xl bg-white max-h-[90vh] overflow-hidden">
+        <form onSubmit={handleSubmit} className="flex flex-col max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle>Create Claim</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-6 py-4 overflow-y-auto pr-2 text-base leading-relaxed">
+            {error && <p className="text-sm text-red-600">{error}</p>}
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-12 gap-4 items-end">
+                {isSuperAdmin && (
+                  <div className="col-span-12 md:col-span-6 space-y-1">
+                    <Label htmlFor="tenant">Tenant</Label>
+                    <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
+                      <SelectTrigger id="tenant">
+                        <SelectValue placeholder="Select tenant" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tenants.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label htmlFor="voyage">Voyage</Label>
+                  <Select value={voyageId} onValueChange={setVoyageId} disabled={superAdminDisabled}>
+                    <SelectTrigger id="voyage">
+                      <SelectValue placeholder="Select a voyage" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {visibleVoyages.map((v) => (
+                        <SelectItem key={v.id} value={v.id}>{v.voyage_reference}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-12 gap-4">
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label htmlFor="claimRef">Claim Reference</Label>
+                  <Input
+                    id="claimRef"
+                    value={claimRef}
+                    onChange={(e) => setClaimRef(e.target.value)}
+                    placeholder="Optional, auto-generated if empty"
+                  />
+                </div>
+
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>Status</Label>
+                  <Select value={status} onValueChange={setStatus}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="archived">Archived</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {selectedVoyage && (
+                <div className="w-full border rounded-xl p-3 bg-slate-50 text-slate-900 space-y-1">
+                  <p className="font-semibold">Voyage: <span className="font-normal">{selectedVoyage.voyage_reference}</span></p>
+                  <p className="font-semibold">Cargo: <span className="font-normal">{selectedVoyage.cargo_names?.name || "—"} ({selectedVoyage.cargo_quantity || "—"})</span></p>
+                  <p className="font-semibold">Charter Party: <span className="font-normal">{selectedVoyage.charter_parties?.name || "—"}</span></p>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-12 gap-4">
+              <div className="col-span-12 md:col-span-4 space-y-1">
+                <Label>Operation</Label>
+                <Select value={operationType} onValueChange={(v: any) => setOperationType(v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Load or Discharge" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="load">Load</SelectItem>
+                    <SelectItem value="discharge">Discharge</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-12 md:col-span-4 space-y-1 relative">
+                <Label htmlFor="port">Port</Label>
+                <Input
+                  id="port"
+                  value={portText}
+                  onChange={(e) => {
+                    setPortText(e.target.value);
+                    setPortName(e.target.value);
+                  }}
+                  onFocus={() => setActiveField("port")}
+                  onBlur={() => setTimeout(() => setActiveField(""), 150)}
+                  placeholder="Type or select port"
                 />
-              </PopoverContent>
-            </Popover>
+                {activeField === "port" && (
+                  <div className="absolute z-30 mt-1 w-full bg-white border rounded shadow-sm text-sm text-gray-700 max-h-40 overflow-auto">
+                    {ports
+                      .filter((p) => !portText || p.name.toLowerCase().includes(portText.toLowerCase()))
+                      .slice(0, 6)
+                      .map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className="w-full text-left px-2 py-1 hover:bg-slate-100"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setPortText(p.name);
+                            setPortName(p.name);
+                          }}
+                        >
+                          {p.name}
+                        </button>
+                      ))}
+                    <button
+                      type="button"
+                      className="w-full text-left px-2 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        requestNew(portText || "New port");
+                      }}
+                    >
+                      Request “{portText || "new port"}”
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="col-span-12 md:col-span-4 space-y-1">
+                <Label htmlFor="country">Country</Label>
+                <Input id="country" value={country} onChange={(e) => setCountry(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="space-y-4 border rounded-xl p-4 bg-slate-50">
+              <p className="text-sm font-semibold text-slate-700">Rates & Reversibility</p>
+              <div className="grid grid-cols-12 gap-4 items-end">
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>Load/Discharge Rate</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      value={rateValue}
+                      onChange={(e) => setRateValue(e.target.value)}
+                      placeholder="e.g. 10000"
+                    />
+                    <Select value={rateUnit} onValueChange={(v: any) => setRateUnit(v)}>
+                      <SelectTrigger className="w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="per_day">Per Day</SelectItem>
+                        <SelectItem value="per_hour">Per Hour</SelectItem>
+                        <SelectItem value="fixed_duration">Fixed Duration</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {rateUnit === "fixed_duration" && (
+                  <div className="col-span-12 md:col-span-3 space-y-1">
+                    <Label>Fixed Hours</Label>
+                    <Input
+                      type="number"
+                      value={fixedHours}
+                      onChange={(e) => setFixedHours(e.target.value)}
+                      placeholder="e.g. 48"
+                    />
+                  </div>
+                )}
+                <div className="col-span-12 md:col-span-3 space-y-1">
+                  <Label>Reversible?</Label>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="rev" checked={reversible} onCheckedChange={(c) => setReversible(!!c)} />
+                    <Label htmlFor="rev" className="text-sm">Reversible laytime</Label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-12 gap-4">
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>Demurrage Rate</Label>
+                  <div className="flex gap-2">
+                    <Select value={demCurrency} onValueChange={(v: any) => setDemCurrency(v)}>
+                      <SelectTrigger className="w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="USD">USD</SelectItem>
+                        <SelectItem value="EUR">EUR</SelectItem>
+                        <SelectItem value="GBP">GBP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      value={demRate}
+                      onChange={(e) => setDemRate(e.target.value)}
+                      placeholder="Rate per day"
+                    />
+                  </div>
+                </div>
+
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>Demurrage After</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="number"
+                      value={demAfterHours}
+                      onChange={(e) => setDemAfterHours(e.target.value)}
+                      placeholder="Hours before new rate"
+                    />
+                    <Input
+                      type="number"
+                      value={demAfterRate}
+                      onChange={(e) => setDemAfterRate(e.target.value)}
+                      placeholder="New rate"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-12 gap-4">
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>Despatch</Label>
+                  <div className="flex gap-2 flex-wrap">
+                    <Select value={despatchType} onValueChange={(v: any) => setDespatchType(v)}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="amount">Amount</SelectItem>
+                        <SelectItem value="percent">Percent of Demurrage</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {despatchType === "amount" && (
+                      <Select value={despatchCurrency} onValueChange={(v: any) => setDespatchCurrency(v)}>
+                        <SelectTrigger className="w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="USD">USD</SelectItem>
+                          <SelectItem value="EUR">EUR</SelectItem>
+                          <SelectItem value="GBP">GBP</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <Input
+                      type="number"
+                      value={despatchRate}
+                      onChange={(e) => setDespatchRate(e.target.value)}
+                      className="flex-1"
+                      placeholder={despatchType === "percent" ? "% of demurrage" : "Rate"}
+                    />
+                  </div>
+                </div>
+
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>Term</Label>
+                  <div className="relative">
+                    <Input
+                      value={termText}
+                      onChange={(e) => {
+                        setTermText(e.target.value);
+                        setSelectedTermId("");
+                      }}
+                      onFocus={() => setActiveField("term")}
+                      onBlur={() => setTimeout(() => setActiveField(""), 150)}
+                      placeholder="Type or select term"
+                    />
+                    {activeField === "term" && (
+                      <div className="absolute z-30 mt-1 w-full bg-white border rounded shadow-sm text-sm text-gray-700 max-h-40 overflow-auto">
+                        {terms
+                          .filter((t) => !termText || t.name.toLowerCase().includes(termText.toLowerCase()))
+                          .slice(0, 6)
+                          .map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              className="w-full text-left px-2 py-1 hover:bg-slate-100"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setTermText(t.name);
+                                setSelectedTermId(t.id);
+                              }}
+                            >
+                              {t.name}
+                            </button>
+                          ))}
+                        <button
+                          type="button"
+                          className="w-full text-left px-2 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            requestNewTerm(termText || "New term");
+                          }}
+                        >
+                          Request “{termText || "new term"}”
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 border rounded-xl p-4 bg-slate-50">
+              <p className="text-sm font-semibold text-slate-700">Key Dates & Times</p>
+              <div className="grid grid-cols-12 gap-4">
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>Laycan Start</Label>
+                  <Input type="datetime-local" value={laycanStart} onChange={(e) => setLaycanStart(e.target.value)} />
+                </div>
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>Laycan End</Label>
+                  <Input type="datetime-local" value={laycanEnd} onChange={(e) => setLaycanEnd(e.target.value)} />
+                </div>
+
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>NOR Tendered</Label>
+                  <Input type="datetime-local" value={norAt} onChange={(e) => setNorAt(e.target.value)} />
+                </div>
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>Loading/Discharge Start</Label>
+                  <Input type="datetime-local" value={loadStart} onChange={(e) => setLoadStart(e.target.value)} />
+                </div>
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>Loading/Discharge End</Label>
+                  <Input type="datetime-local" value={loadEnd} onChange={(e) => setLoadEnd(e.target.value)} />
+                </div>
+
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>Laytime Starts</Label>
+                  <Input type="datetime-local" value={laytimeStart} onChange={(e) => setLaytimeStart(e.target.value)} />
+                </div>
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>Laytime Ends</Label>
+                  <Input type="datetime-local" value={laytimeEnd} onChange={(e) => setLaytimeEnd(e.target.value)} />
+                </div>
+
+                <div className="col-span-12 space-y-1">
+                  <Label>Turn Time Method</Label>
+                  <Input
+                    value={turnTimeMethod}
+                    onChange={(e) => setTurnTimeMethod(e.target.value)}
+                    placeholder="Free text"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-        <DialogFooter>
-          <Button type="submit">Create</Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={loading}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading || superAdminDisabled}>
+              {loading ? "Creating..." : "Create Claim"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

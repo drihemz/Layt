@@ -23,6 +23,8 @@ import { MoreHorizontal, Ship, Search } from "lucide-react";
 import { Session } from "next-auth";
 import { CreateVoyageDialog } from "@/components/voyages/CreateVoyageDialog";
 import { useEffect } from 'react';
+import Link from "next/link";
+import { EditVoyageDialog } from "./EditVoyageDialog";
 
 type Lookups = {
   parties: any[];
@@ -169,9 +171,48 @@ export default function VoyagesClientPage({ voyages, lookups, tenantIdFilter, pa
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Edit</DropdownMenuItem>
-                        <DropdownMenuItem>Remove</DropdownMenuItem>
-                        <DropdownMenuItem>Create Claim</DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <EditVoyageDialog voyage={voyage} lookups={lookups} onSaved={() => router.refresh()} />
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            if (!confirm("Delete this voyage?")) return;
+                            try {
+                              const res = await fetch("/api/voyages", {
+                                method: "DELETE",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ id: voyage.id }),
+                              });
+                              if (!res.ok) {
+                                const j = await res.json().catch(() => ({}));
+                                throw new Error(j.error || "Failed to delete");
+                              }
+                              router.refresh();
+                            } catch (e: any) {
+                              alert(e.message || "Delete failed");
+                            }
+                          }}
+                        >
+                          Remove
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            try {
+                              const res = await fetch("/api/claims", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ voyage_id: voyage.id }),
+                              });
+                              const json = await res.json();
+                              if (!res.ok) throw new Error(json.error || "Failed to create claim");
+                              router.push(`/claims/${json.id || json?.data?.id || ""}/calculation`);
+                            } catch (e: any) {
+                              alert(e.message || "Failed to create claim");
+                            }
+                          }}
+                        >
+                          Create Claim
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

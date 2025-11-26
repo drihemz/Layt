@@ -46,9 +46,32 @@ This file tracks the development progress of the Laytime Platform. It is designe
     - [x] Installed the missing `@radix-ui/react-checkbox` dependency.
   - [x] **Fixed `400 Bad Request` on Data Creation:**
     - [x] Corrected the `table` name in the payload in `CargoDialog.tsx` and `CharterPartyDialog.tsx`.
-  - [x] **Fixed Authentication and Data Fetching:**
-    - [x] Reverted to `CredentialsProvider` and implemented a secure way to generate Supabase JWTs.
-    - [x] Simplified the data fetching logic in the Data Management page to rely on RLS policies.
+- [x] **Fixed Authentication and Data Fetching:**
+  - [x] Reverted to `CredentialsProvider` and implemented a secure way to generate Supabase JWTs.
+  - [x] Simplified the data fetching logic in the Data Management page to rely on RLS policies.
+- [x] **Fixed Lookup “tenants/tenantName column” errors for public data:**
+  - [x] Stopped sending UI-only `tenantName` to Supabase from lookup dialogs and trimmed required name fields to prevent null/invalid inserts.
+  - [x] Updated lookup fetching to avoid `tenants(name)` joins and attach tenant labels client-side.
+- [x] **Lookup Read Access for Operators:**
+  - [x] Allowed all authenticated roles (including operators) to fetch lookup data/terms via `/api/lookup` while keeping write restrictions, so term dropdowns render in claim flows.
+- [x] **Claim Events API Stability:**
+  - [x] Simplified claim fetch in `/api/claims/[id]/events` to avoid schema-cache column errors that returned 404s for existing claims.
+  - [x] Reduced the select to `*` so existing claims are always found even if related columns change.
+  - [x] API now returns tenant/public terms alongside claim/events so the calculator dropdown always has options without extra fetches.
+  - [x] Calculator API now also fetches voyage cargo quantity/name for the claim so allowed time calculations work.
+- [x] **Claim Creation UX:**
+  - [x] Restructured the Create Claim dialog into clearer sections (voyage/metadata, ops/location, rates, timings) with better spacing and scrolling.
+  - [x] Added port type-ahead dropdown with inline request-to-admin action; ports load when the dialog opens.
+  - [x] Added term type-ahead dropdown with inline “request term” action.
+- [ ] **Billing & Plans**
+  - [x] Added billing schema (plans, tenant_plans, invoices) with enums for cycles/status.
+  - [x] Super admin plans CRUD API and UI page to create/list plans.
+  - [x] Invoices API and page to list/mark paid; dashboard metrics for due/paid.
+  - [x] Super admin dashboard with core metrics (tenants, users, voyages, claims, invoice totals).
+  - [x] Added max_claims_per_month to plans and surfaced in Plans UI.
+  - [ ] Tenant plan assignment UI (link plan to tenant, seats/limits).
+  - [ ] Feature gating enforcement (data tabs, seats, max voyages/claims) in app surfaces.
+  - [ ] Automated invoice generation per plan/period.
 
 ### To Be Done
 
@@ -57,12 +80,19 @@ This file tracks the development progress of the Laytime Platform. It is designe
   - [ ] Review and enhance the responsiveness of all components.
 
 - [ ] **Build out remaining screens:**
-  - [ ] **Claims Screen:**
-    - [ ] Design and implement the UI for listing and managing claims.
-    - [ ] Create a dialog for creating new claims.
-  - [ ] **Calculation UI:**
-    - [ ] Design and implement the UI for laytime and demurrage calculations.
-    - [ ] Integrate the calculation engine.
+- [ ] **Claims Screen:**
+  - [x] Add claim calculation workspace with SOF event timeline and manual event capture.
+  - [x] Implement claims listing with real data and calculator links.
+  - [x] Create a dialog for creating new claims (now captures operation type, port/country, laycan/NOR/load/laytime timestamps, reversible flag, rate units/fixed duration, demurrage/despatch inputs, and term selection).
+  - [ ] Improve claim creation layout/readability (long form still cramped for users).
+  - [x] Add in-page claim details editing on the calculator page (apply new claim fields).
+  - [x] Show derived summaries on calculator page: allowed time vs used vs overage, demurrage/despatch result with color cues.
+  - [x] Load terms on calculator page and allow term selection/editing.
+  - [x] Ensure terms are fetched via lookup API (GET now includes terms); surface term names in claim flows.
+- [ ] **Calculation UI:**
+  - [x] Initial calculator for per-claim events with time-used computation and demurrage/despatch estimates.
+  - [ ] Expand with clause-based engine and audit trail.
+  - [x] Apply new claim fields (rates, laycan, reversible, terms) into calculation logic and summary.
   - [ ] **Admin Panels:**
     - [ ] Enhance the `super_admin` dashboard with more features.
     - [ ] Implement user management for `customer_admin`.
@@ -78,6 +108,27 @@ This file tracks the development progress of the Laytime Platform. It is designe
 - [ ] **API Hardening:**
   - [ ] Add session checks to all protected API routes.
   - [ ] Implement robust error handling and logging.
+
+- [ ] **Voyages Enhancements:**
+  - [x] Add voyage editing (UI dialog + PUT API) and delete action.
+  - [ ] Improve voyage creation/editing UX and validations.
+  - [x] Add operator request-new option in voyage selectors (vessels, cargo, parties, charter parties) posting to requests API.
+  - [x] Convert voyage selectors to single type-ahead fields with inline dropdown suggestions and bottom “Request” action when no match.
+  - [ ] Fix relationship field handling in edit form (avoid non-column payloads) and add cp_date if needed.
+
+- [ ] **Data Management - Terms:**
+  - [x] Add UI tab to manage terms (name, window start/end, notes, tenant/public).
+  - [ ] Hook term selection into claim creation/edit flows (calculator page).
+  - [x] Add holiday flag (include_holidays) and day dropdowns; full holiday listing deferred.
+  - [x] Fix missing DialogDescription import in Term dialog.
+
+- [ ] **Data Management - Terms:**
+  - [ ] Add UI tab to manage terms (name, window start/end, notes, tenant/public).
+  - [ ] Hook term selection into claim creation/edit flows (calculator page).
+
+- [ ] **Migrations & Policies:**
+  - [x] Added migration 008 to extend claims with laytime/demurrage fields and terms with window/public flag; updated terms read policy for public visibility.
+  - [x] Added migration 009 for requests table with RLS/policies.
 
 ### High Priority Bug Fixes (New)
 

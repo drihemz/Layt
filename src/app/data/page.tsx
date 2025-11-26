@@ -7,6 +7,8 @@ import VesselsTabContent from "@/components/data/VesselsTabContent";
 import PortsTabContent from "@/components/data/PortsTabContent";
 import CargoTabContent from "@/components/data/CargoTabContent";
 import CharterPartiesTabContent from "@/components/data/CharterPartiesTabContent";
+import TermsTabContent from "@/components/data/TermsTabContent";
+import RequestsTabContent from "@/components/data/RequestsTabContent";
 
 import {
   Tabs,
@@ -23,7 +25,7 @@ export default async function DataPage() {
     redirect("/auth/login");
   }
 
-  const { parties, vessels, ports, cargoNames, charterParties } = await getLookupData(session);
+  const { parties, vessels, ports, cargoNames, charterParties, terms } = await getLookupData(session);
 
   return (
     <div className="p-4 md:p-8 space-y-6">
@@ -32,12 +34,16 @@ export default async function DataPage() {
       </div>
 
       <Tabs defaultValue="parties" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="parties">Parties</TabsTrigger>
           <TabsTrigger value="vessels">Vessels</TabsTrigger>
           <TabsTrigger value="ports">Ports</TabsTrigger>
           <TabsTrigger value="cargo">Cargo</TabsTrigger>
           <TabsTrigger value="charterParties">Charter Parties</TabsTrigger>
+          <TabsTrigger value="terms">Terms</TabsTrigger>
+          {(session.user.role === "customer_admin" || session.user.role === "super_admin") && (
+            <TabsTrigger value="requests">Requests</TabsTrigger>
+          )}
         </TabsList>
 
         {/* Parties Tab */}
@@ -64,6 +70,16 @@ export default async function DataPage() {
         <TabsContent value="charterParties">
           <CharterPartiesTabContent charterParties={charterParties} session={session} />
         </TabsContent>
+
+        <TabsContent value="terms">
+          <TermsTabContent terms={terms} session={session} />
+        </TabsContent>
+
+        {(session.user.role === "customer_admin" || session.user.role === "super_admin") && (
+          <TabsContent value="requests">
+            <RequestsTabContent session={session} />
+          </TabsContent>
+        )}
 
       </Tabs>
     </div>

@@ -19,7 +19,7 @@ interface Port {
   country: string;
   latitude: number;
   longitude: number;
-  tenants: { name: string } | null;
+  tenantName?: string | null;
 }
 
 export default function PortsTabContent({ ports, session }: { ports: Port[], session: Session }) {
@@ -54,7 +54,7 @@ export default function PortsTabContent({ ports, session }: { ports: Port[], ses
                 <TableCell>{port.latitude}</TableCell>
                 <TableCell>{port.longitude}</TableCell>
                 <TableCell>{(port as any).is_public ? 'Yes' : 'No'}</TableCell>
-                <TableCell>{port.tenants?.name || ((port as any).is_public ? 'Public' : '')}</TableCell>
+                <TableCell>{port.tenantName || ((port as any).is_public ? 'Public' : '')}</TableCell>
                 <TableCell className="text-right">
                   <PortDialog port={port} session={session}>
                     <Button variant="ghost" size="sm">Edit</Button>

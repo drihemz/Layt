@@ -19,7 +19,7 @@ interface Party {
   country: string;
   email: string;
   kyc_status: string;
-  tenants: { name: string } | null;
+  tenantName?: string | null;
 }
 
 export default function PartiesTabContent({ parties, session }: { parties: Party[], session: Session }) {
@@ -54,7 +54,7 @@ export default function PartiesTabContent({ parties, session }: { parties: Party
                 <TableCell>{party.email}</TableCell>
                 <TableCell>{party.kyc_status}</TableCell>
                 <TableCell>{party.is_public ? 'Yes' : 'No'}</TableCell>
-                <TableCell>{party.tenants?.name || (party.is_public ? 'Public' : '')}</TableCell>
+                <TableCell>{party.tenantName || (party.is_public ? 'Public' : '')}</TableCell>
                 <TableCell className="text-right">
                   <PartyDialog party={party} session={session}>
                     <Button variant="ghost" size="sm">Edit</Button>
