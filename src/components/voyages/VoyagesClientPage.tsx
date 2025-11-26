@@ -26,7 +26,6 @@ import { useEffect } from 'react';
 import Link from "next/link";
 import { EditVoyageDialog } from "./EditVoyageDialog";
 import { PortCallsDialog } from "./PortCallsDialog";
-import { PortCallsDialog } from "./PortCallsDialog";
 
 type Lookups = {
   parties: any[];
@@ -145,13 +144,14 @@ export default function VoyagesClientPage({ voyages, lookups, tenantIdFilter, pa
               <TableHead className="text-ocean-700 font-bold">Charterer</TableHead>
               <TableHead className="text-ocean-700 font-bold">Cargo</TableHead>
               <TableHead className="text-ocean-700 font-bold">Voyage #</TableHead>
+              <TableHead className="text-ocean-700 font-bold">Ports</TableHead>
               <TableHead className="text-ocean-700 font-bold text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {voyages.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="p-0">
+                <TableCell colSpan={8} className="p-0">
                   <EmptyState lookups={lookups} session={session} />
                 </TableCell>
               </TableRow>
@@ -164,6 +164,21 @@ export default function VoyagesClientPage({ voyages, lookups, tenantIdFilter, pa
                   <TableCell>{voyage.charterer?.name || <span className="text-ocean-300">—</span>}</TableCell>
                   <TableCell>{voyage.cargo_names?.name || <span className="text-ocean-300">—</span>}</TableCell>
                   <TableCell>{voyage.voyage_number || <span className="text-ocean-300">—</span>}</TableCell>
+                  <TableCell>
+                    {Array.isArray((voyage as any).port_calls) && (voyage as any).port_calls.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 text-xs">
+                        {(voyage as any).port_calls
+                          .sort((a: any, b: any) => (a.sequence || 0) - (b.sequence || 0))
+                          .map((p: any) => (
+                            <span key={p.id} className="px-2 py-1 rounded-full bg-ocean-50 text-ocean-700 border border-ocean-100">
+                              {p.sequence || ""} {p.port_name} ({p.activity})
+                            </span>
+                          ))}
+                      </div>
+                    ) : (
+                      <span className="text-ocean-300">—</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

@@ -48,6 +48,8 @@ export default function ClaimsClient({
   isSuperAdmin: boolean;
   tenantIdFilter?: string;
   terms: Term[];
+  defaultVoyageId?: string;
+  defaultPortCallId?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -122,7 +124,14 @@ export default function ClaimsClient({
             />
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-ocean-400" />
           </div>
-          <CreateClaimDialog voyages={voyages} tenantId={tenantValue} isSuperAdmin={isSuperAdmin} terms={terms} />
+          <CreateClaimDialog
+            voyages={voyages}
+            tenantId={tenantValue}
+            isSuperAdmin={isSuperAdmin}
+            terms={terms}
+            defaultVoyageId={defaultVoyageId}
+            defaultPortCallId={defaultPortCallId}
+          />
         </div>
       </div>
 

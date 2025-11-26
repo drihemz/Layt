@@ -92,11 +92,11 @@ This file tracks the development progress of the Laytime Platform. It is designe
 - [ ] **Voyage Enhancements**
   - [x] Added port_calls table and API (ETA/ETD, activity, status, sequence).
   - [x] Port Calls dialog to manage legs per voyage.
+  - [x] Port call summary shown in voyages list; button to create claim preselects voyage/port call.
   - [ ] Link claims creation from port calls and surface per-port claims.
-  - [ ] Show port call summary in voyages list and voyage details.
-  - [ ] Reversible scope usage across ports (load-only/discharge-only/all) to integrate with calculations.
-- [ ] **Voyage Enhancements**
-  - [ ] Multi-port legs with ETA/ETD and status tracking.
+  - [ ] Show port call summary in voyage details page (deeper view).
+  - [ ] Reversible scope usage across ports in calculations.
+  - [ ] Multi-port legs with ETA/ETD and status tracking (polish).
 - [ ] **Data Management Enhancements**
   - [ ] Holidays/terms library (reusable calendars).
   - [ ] Bulk import and dedupe tools for lookups.

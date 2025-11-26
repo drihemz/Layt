@@ -38,9 +38,11 @@ interface Props {
   tenantId?: string | null;
   isSuperAdmin: boolean;
   terms: Term[];
+  defaultVoyageId?: string;
+  defaultPortCallId?: string;
 }
 
-export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Props) {
+export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defaultVoyageId, defaultPortCallId }: Props) {
   useSession(); // keep session provider engaged if needed later
   const [open, setOpen] = useState(false);
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -80,6 +82,8 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
   const [activeField, setActiveField] = useState<string>("");
   const [termText, setTermText] = useState("");
   const [previewAllowed, setPreviewAllowed] = useState<string>("—");
+  const [portCalls, setPortCalls] = useState<{ id: string; port_name: string; activity?: string | null }[]>([]);
+  const [portCallId, setPortCallId] = useState<string>("");
 
   const resetForm = () => {
     setClaimRef("");
@@ -128,7 +132,8 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
 
   useEffect(() => {
     if (tenantId) setSelectedTenantId(tenantId);
-  }, [tenantId]);
+    if (defaultVoyageId) setVoyageId(defaultVoyageId);
+  }, [tenantId, defaultVoyageId]);
 
   useEffect(() => {
     async function fetchPorts() {
@@ -146,6 +151,29 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
       fetchPorts();
     }
   }, [open]);
+
+  useEffect(() => {
+    async function fetchPortCalls() {
+      if (!voyageId) {
+        setPortCalls([]);
+        setPortCallId("");
+        return;
+      }
+      try {
+        const res = await fetch(`/api/voyages/${voyageId}/port-calls`);
+        const json = await res.json();
+        if (res.ok) {
+          setPortCalls(json.portCalls || []);
+          if (defaultPortCallId) {
+            setPortCallId(defaultPortCallId);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load port calls", e);
+      }
+    }
+    fetchPortCalls();
+  }, [voyageId, defaultPortCallId]);
 
   const requestNew = async (name: string) => {
     if (!name) return;
@@ -208,6 +236,17 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
     }
   }, [selectedVoyage, rateValue, rateUnit, fixedHours]);
 
+  useEffect(() => {
+    if (!portCallId) return;
+    const pc = portCalls.find((p) => p.id === portCallId);
+    if (pc) {
+      if (!portName) setPortName(pc.port_name);
+      if (!operationType && (pc.activity === "load" || pc.activity === "discharge")) {
+        setOperationType(pc.activity as any);
+      }
+    }
+  }, [portCallId, portCalls, portName, operationType]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
@@ -251,6 +290,7 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
         turn_time_method: turnTimeMethod || null,
         term_id: selectedTermId || null,
         reversible_scope: reversibleScope || "all_ports",
+        port_call_id: portCallId || null,
       };
       if (isSuperAdmin) {
         payload.tenant_id = selectedTenantId;
@@ -315,12 +355,12 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
                   </div>
                 )}
 
-                <div className="col-span-12 md:col-span-6 space-y-1">
-                  <Label htmlFor="voyage">Voyage</Label>
-                  <Select value={voyageId} onValueChange={setVoyageId} disabled={superAdminDisabled}>
-                    <SelectTrigger id="voyage">
-                      <SelectValue placeholder="Select a voyage" />
-                    </SelectTrigger>
+              <div className="col-span-12 md:col-span-6 space-y-1">
+                <Label htmlFor="voyage">Voyage</Label>
+                <Select value={voyageId} onValueChange={setVoyageId} disabled={superAdminDisabled}>
+                  <SelectTrigger id="voyage">
+                    <SelectValue placeholder="Select a voyage" />
+                  </SelectTrigger>
                     <SelectContent>
                       {visibleVoyages.map((v) => (
                         <SelectItem key={v.id} value={v.id}>{v.voyage_reference}</SelectItem>
@@ -380,6 +420,24 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms }: Pr
                   </SelectContent>
                 </Select>
               </div>
+
+              {portCalls.length > 0 && (
+                <div className="col-span-12 md:col-span-6 space-y-1">
+                  <Label>Port Call</Label>
+                  <Select value={portCallId} onValueChange={(v) => setPortCallId(v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a port call" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {portCalls.map((pc) => (
+                        <SelectItem key={pc.id} value={pc.id}>
+                          {pc.port_name} · {pc.activity || "other"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="col-span-12 md:col-span-4 space-y-1 relative">
                 <Label htmlFor="port">Port</Label>
                 <Input

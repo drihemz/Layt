@@ -42,6 +42,8 @@ type Claim = {
   load_discharge_rate_unit?: string | null;
   fixed_rate_duration_hours?: number | null;
   reversible?: boolean | null;
+  reversible_scope?: string | null;
+  port_call_id?: string | null;
   laytime_start?: string | null;
   laytime_end?: string | null;
   nor_tendered_at?: string | null;
@@ -56,6 +58,7 @@ type Claim = {
   } | null;
   term_id?: string | null;
   terms?: { name?: string | null } | null;
+  port_calls?: { port_name?: string | null } | null;
 };
 
 type EventRow = {
@@ -550,6 +553,9 @@ export default function CalculationPage({ params }: { params: { claimId: string 
           <h1 className="text-3xl font-bold text-gray-900">
             {claim.claim_reference}
           </h1>
+          <p className="text-xs text-slate-600">
+            Reversible: {claim.reversible ? "Yes" : "No"} {claim.reversible_scope ? `(${claim.reversible_scope.replace("_"," ")})` : ""}
+          </p>
         </div>
         <div className="flex items-start gap-6 text-sm text-gray-700">
           <div className="text-right">

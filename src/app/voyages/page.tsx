@@ -17,7 +17,8 @@ async function getVoyagesData(tenantId: string, search: string, page: number) {
       vessels(name),
       owner:owner_id(name),
       charterer:charterer_id(name),
-      cargo_names(name)
+      cargo_names(name),
+      port_calls(id, port_name, activity, sequence, eta, etd, status)
     `)
     .order("created_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);

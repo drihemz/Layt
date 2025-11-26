@@ -167,6 +167,7 @@ export function PortCallsDialog({ voyageId, onChange }: { voyageId: string; onCh
                     <p className="text-xs text-slate-500">ETA {pc.eta || "—"} · ETD {pc.etd || "—"} · Seq {pc.sequence || "—"}</p>
                   </div>
                   <div className="space-x-2">
+                    <Button size="sm" variant="outline" onClick={() => { window.location.href = `/claims?voyageId=${voyageId}&portCallId=${pc.id}`; }}>Create Claim</Button>
                     <Button size="sm" variant="ghost" onClick={() => editRow(pc)}>Edit</Button>
                     <Button size="sm" variant="ghost" className="text-red-600" onClick={() => delRow(pc.id)}>Delete</Button>
                   </div>
