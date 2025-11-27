@@ -60,14 +60,16 @@ async function loadClaim(
 
   if (error || !claim) return { error: error?.message || "Claim not found" };
 
+  const claimAny: any = claim;
+
   let voyageData = null;
   let portCallData = null;
   let voyagePortCalls: any[] = [];
-  if (claim.voyage_id) {
+  if (claimAny.voyage_id) {
     const { data: voyage, error: voyageError } = await supabase
       .from("voyages")
       .select("id, cargo_quantity, cargo_names(name), charter_parties(name)")
-      .eq("id", claim.voyage_id)
+      .eq("id", claimAny.voyage_id)
       .single();
     if (voyageError) {
       console.warn("loadClaim voyage fetch warning", voyageError);
@@ -77,15 +79,15 @@ async function loadClaim(
     const { data: pcs } = await supabase
       .from("port_calls")
       .select("id, port_name, activity, sequence, eta, etd, status, allowed_hours")
-      .eq("voyage_id", claim.voyage_id)
+      .eq("voyage_id", claimAny.voyage_id)
       .order("sequence", { ascending: true });
     voyagePortCalls = pcs || [];
   }
-  if (claim.port_call_id) {
+  if (claimAny.port_call_id) {
     const { data: pc } = await supabase
       .from("port_calls")
       .select("id, port_name, activity, sequence, eta, etd, status, allowed_hours")
-      .eq("id", claim.port_call_id)
+      .eq("id", claimAny.port_call_id)
       .maybeSingle();
     if (pc) portCallData = pc;
   }
