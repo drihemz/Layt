@@ -48,7 +48,11 @@ async function loadVoyages(tenantId?: string) {
     console.error("Error fetching voyages", error);
     return [];
   }
-  return data || [];
+  return (data || []).map((v: any) => ({
+    ...v,
+    cargo_names: Array.isArray(v.cargo_names) ? v.cargo_names[0] : v.cargo_names || null,
+    charter_parties: Array.isArray(v.charter_parties) ? v.charter_parties[0] : v.charter_parties || null,
+  }));
 }
 
 async function loadTerms(tenantId?: string) {
