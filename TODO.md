@@ -59,6 +59,7 @@ This file tracks the development progress of the Laytime Platform. It is designe
   - [x] Reduced the select to `*` so existing claims are always found even if related columns change.
   - [x] API now returns tenant/public terms alongside claim/events so the calculator dropdown always has options without extra fetches.
   - [x] Calculator API now also fetches voyage cargo quantity/name for the claim so allowed time calculations work.
+  - [x] Claim events API always returns full voyage port calls (even when the claim is tied to one) so reversible pooling can sum per-port allowances.
 - [x] **Claim Creation UX:**
   - [x] Restructured the Create Claim dialog into clearer sections (voyage/metadata, ops/location, rates, timings) with better spacing and scrolling.
   - [x] Added port type-ahead dropdown with inline request-to-admin action; ports load when the dialog opens.
@@ -86,16 +87,20 @@ This file tracks the development progress of the Laytime Platform. It is designe
   - [x] Added claim attachments (NOR/SOF) upload/list/delete with storage.
   - [x] Added SOF event audit trail (insert/update/delete logged and shown on calculator).
   - [ ] PDF export of laytime statement.
-  - [x] SOF events now editable/deletable.
-  - [x] Time format toggle (DD.HH.MM.SS vs decimal days) in calculator.
-  - [x] Allowed-time preview in claim creation based on voyage cargo and rate.
+- [x] SOF events now editable/deletable.
+- [x] Time format toggle (DD.HH.MM.SS vs decimal days) in calculator.
+- [x] Allowed-time preview in claim creation based on voyage cargo and rate.
+- [x] Reversible scope applied in calculations: events tag port_call, totals filtered by scope; allowed time sums scope-matching per-port `allowed_hours` or falls back to cargo/rate.
+- [ ] Improve non-reversible per-port balances and expose per-port breakdowns when pooling is off.
+- [x] Added scope-aware per-port breakdown cards in the calculator (allowed/used/over-under) alongside pooled totals.
+- [ ] Refine reversible pooling math when laytime span is missing (ensure pooled allowed minus pooled deductions logic matches charter terms).
 - [ ] **Voyage Enhancements**
   - [x] Added port_calls table and API (ETA/ETD, activity, status, sequence).
   - [x] Port Calls dialog to manage legs per voyage.
   - [x] Port call summary shown in voyages list; button to create claim preselects voyage/port call.
-  - [ ] Link claims creation from port calls and surface per-port claims.
-  - [ ] Show port call summary in voyage details page (deeper view).
-  - [ ] Reversible scope usage across ports in calculations.
+  - [x] Voyage detail page with port call timeline and per-port-call claims + create links.
+  - [x] Port calls expose `allowed_hours` to drive reversible pooling; claim events carry `port_call_id`.
+  - [ ] Reversible scope usage across ports in calculations (richer per-port breakdowns, validation).
   - [ ] Multi-port legs with ETA/ETD and status tracking (polish).
 - [ ] **Data Management Enhancements**
   - [ ] Holidays/terms library (reusable calendars).

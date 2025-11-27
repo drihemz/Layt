@@ -41,6 +41,9 @@ export default function ClaimsClient({
   isSuperAdmin,
   tenantIdFilter,
   terms,
+  defaultVoyageId,
+  defaultPortCallId,
+  openCreate,
 }: {
   claims: Claim[];
   voyages: Voyage[];
@@ -50,6 +53,7 @@ export default function ClaimsClient({
   terms: Term[];
   defaultVoyageId?: string;
   defaultPortCallId?: string;
+  openCreate?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -66,6 +70,42 @@ export default function ClaimsClient({
         .catch(() => setTenants([]));
     }
   }, [isSuperAdmin]);
+
+  // If super_admin and a default voyage is provided, or only one tenant exists, preselect tenant to enable Create Claim
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    const params = new URLSearchParams(searchParams);
+    if (!tenantValue && defaultVoyageId) {
+      const v = voyages.find((voy) => voy.id === defaultVoyageId && (voy as any).tenant_id);
+      if (v && (v as any).tenant_id) {
+        setTenantValue((v as any).tenant_id);
+        params.set("tenantId", (v as any).tenant_id);
+        router.replace(`${pathname}?${params.toString()}`);
+        return;
+      }
+    }
+    if (!tenantValue && tenants.length === 1) {
+      setTenantValue(tenants[0].id);
+      params.set("tenantId", tenants[0].id);
+      router.replace(`${pathname}?${params.toString()}`);
+      return;
+    }
+    if (!tenantValue && voyages.length > 0 && (voyages[0] as any).tenant_id) {
+      setTenantValue((voyages[0] as any).tenant_id);
+      params.set("tenantId", (voyages[0] as any).tenant_id);
+      router.replace(`${pathname}?${params.toString()}`);
+      return;
+    }
+  }, [isSuperAdmin, tenantValue, defaultVoyageId, voyages, tenants, router, pathname, searchParams]);
+
+  // Clear openCreate param after initial use to avoid reopening
+  useEffect(() => {
+    if (openCreate) {
+      const params = new URLSearchParams(searchParams);
+      params.delete("openCreate");
+      router.replace(`${pathname}?${params.toString()}`);
+    }
+  }, [openCreate, router, pathname, searchParams]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
@@ -131,6 +171,7 @@ export default function ClaimsClient({
             terms={terms}
             defaultVoyageId={defaultVoyageId}
             defaultPortCallId={defaultPortCallId}
+            initialOpen={openCreate}
           />
         </div>
       </div>

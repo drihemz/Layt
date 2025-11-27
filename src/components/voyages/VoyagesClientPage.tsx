@@ -158,7 +158,11 @@ export default function VoyagesClientPage({ voyages, lookups, tenantIdFilter, pa
             ) : (
               voyages.map((voyage) => (
                 <TableRow key={voyage.id} className="group hover:bg-ocean-50/60 transition">
-                  <TableCell className="font-semibold text-ocean-800">{voyage.voyage_reference}</TableCell>
+                  <TableCell className="font-semibold text-ocean-800">
+                    <Link href={`/voyages/${voyage.id}`} className="hover:underline">
+                      {voyage.voyage_reference}
+                    </Link>
+                  </TableCell>
                   <TableCell>{voyage.vessels?.name || <span className="text-ocean-300">—</span>}</TableCell>
                   <TableCell>{voyage.owner?.name || <span className="text-ocean-300">—</span>}</TableCell>
                   <TableCell>{voyage.charterer?.name || <span className="text-ocean-300">—</span>}</TableCell>
@@ -170,9 +174,24 @@ export default function VoyagesClientPage({ voyages, lookups, tenantIdFilter, pa
                         {(voyage as any).port_calls
                           .sort((a: any, b: any) => (a.sequence || 0) - (b.sequence || 0))
                           .map((p: any) => (
-                            <span key={p.id} className="px-2 py-1 rounded-full bg-ocean-50 text-ocean-700 border border-ocean-100">
-                              {p.sequence || ""} {p.port_name} ({p.activity})
-                            </span>
+                            <DropdownMenu key={p.id}>
+                              <DropdownMenuTrigger asChild>
+                                <button className="px-2 py-1 rounded-full bg-ocean-50 text-ocean-700 border border-ocean-100 hover:bg-ocean-100">
+                                  {p.sequence || ""} {p.port_name} ({p.activity})
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                <DropdownMenuItem asChild>
+                          <Link href={`/claims?voyageId=${voyage.id}&portCallId=${p.id}&openCreate=1`}>Create Claim</Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href={`/port-calls/${p.id}`}>Open Port Call</Link>
+                        </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <PortCallsDialog voyageId={voyage.id} onChange={() => router.refresh()} />
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           ))}
                       </div>
                     ) : (

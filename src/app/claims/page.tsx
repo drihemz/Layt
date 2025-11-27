@@ -77,6 +77,7 @@ export default async function ClaimsPage({ searchParams }: { searchParams?: Sear
   const requestedTenant = typeof searchParams?.tenantId === "string" ? searchParams.tenantId : undefined;
   const defaultVoyageId = typeof searchParams?.voyageId === "string" ? searchParams.voyageId : undefined;
   const defaultPortCallId = typeof searchParams?.portCallId === "string" ? searchParams.portCallId : undefined;
+  const openCreate = searchParams?.openCreate === "1";
   const tenantFilter = session.user.role === "super_admin" ? requestedTenant : session.user.tenantId;
 
   if (!tenantFilter && session.user.role !== "super_admin") {
@@ -99,6 +100,7 @@ export default async function ClaimsPage({ searchParams }: { searchParams?: Sear
       terms={terms}
       defaultVoyageId={defaultVoyageId}
       defaultPortCallId={defaultPortCallId}
+      openCreate={openCreate}
     />
   );
 }

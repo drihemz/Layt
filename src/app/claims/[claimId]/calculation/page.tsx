@@ -58,7 +58,7 @@ type Claim = {
   } | null;
   term_id?: string | null;
   terms?: { name?: string | null } | null;
-  port_calls?: { port_name?: string | null } | null;
+  port_calls?: { id: string; port_name?: string | null; activity?: string | null; sequence?: number | null; allowed_hours?: number | null }[] | null;
 };
 
 type EventRow = {
@@ -68,6 +68,8 @@ type EventRow = {
   to_datetime: string;
   rate_of_calculation: number;
   time_used: number;
+  port_call_id?: string | null;
+  port_calls?: { port_name?: string | null; activity?: string | null } | null;
 };
 
 type Attachment = {
@@ -143,18 +145,23 @@ function AddEventForm({
   editing,
   clearEdit,
   loading,
+  portCalls,
+  claimPortCallId,
 }: {
   onAdd: (payload: Omit<EventRow, "id" | "time_used">) => Promise<void>;
   onUpdate: (id: string, payload: Omit<EventRow, "id" | "time_used">) => Promise<void>;
   editing: EventRow | null;
   clearEdit: () => void;
   loading: boolean;
+  portCalls: { id: string; port_name: string; activity?: string | null }[];
+  claimPortCallId?: string | null;
 }) {
   const [deduction, setDeduction] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [rate, setRate] = useState(100);
   const [error, setError] = useState<string | null>(null);
+  const [portCallId, setPortCallId] = useState<string>("none");
 
   useEffect(() => {
     if (editing) {
@@ -162,13 +169,16 @@ function AddEventForm({
       setFrom(toInputValue(editing.from_datetime));
       setTo(toInputValue(editing.to_datetime));
       setRate(editing.rate_of_calculation);
+      setPortCallId(editing.port_call_id || "none");
     } else {
       setDeduction("");
       setFrom("");
       setTo("");
       setRate(100);
+      setPortCallId("none");
+      if (claimPortCallId) setPortCallId(claimPortCallId);
     }
-  }, [editing]);
+  }, [editing, claimPortCallId]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -183,6 +193,7 @@ function AddEventForm({
         from_datetime: from,
         to_datetime: to,
         rate_of_calculation: rate,
+        port_call_id: portCallId === "none" ? null : portCallId,
       });
     } else {
       await onAdd({
@@ -190,6 +201,7 @@ function AddEventForm({
         from_datetime: from,
         to_datetime: to,
         rate_of_calculation: rate,
+        port_call_id: portCallId === "none" ? null : portCallId,
       });
     }
   };
@@ -205,6 +217,24 @@ function AddEventForm({
             onChange={(e) => setDeduction(e.target.value)}
           />
         </div>
+        {!claimPortCallId && (
+          <div className="space-y-1">
+            <Label>Port Call</Label>
+            <Select value={portCallId} onValueChange={(v: any) => setPortCallId(v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="All / Not set" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">All / Unassigned</SelectItem>
+                {portCalls.map((pc) => (
+                  <SelectItem key={pc.id} value={pc.id}>
+                    {pc.port_name} ({pc.activity || "other"})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <div className="space-y-1">
           <Label>From</Label>
           <Input
@@ -257,16 +287,39 @@ function Summary({
   claim: Claim;
   timeFormat: TimeFormat;
 }) {
-  const deductions = events.reduce((sum, ev) => sum + (ev.time_used || 0), 0);
+  const scopeAllows = (activity?: string | null) => {
+    if (!claim.reversible_scope || claim.reversible_scope === "all_ports") return true;
+    if (claim.reversible_scope === "load_only") return activity === "load";
+    if (claim.reversible_scope === "discharge_only") return activity === "discharge";
+    return true;
+  };
 
-  const layHours =
-    claim.laytime_start && claim.laytime_end
-      ? (new Date(claim.laytime_end).getTime() - new Date(claim.laytime_start).getTime()) / (1000 * 60 * 60)
-      : null;
-  const usedHours = layHours !== null ? Math.max(0, layHours - deductions) : null;
+  // Group events by port call to apply reversible scope
+  const allowedByPort: Record<string, number> = {};
+  (claim.port_calls || []).forEach((pc) => {
+    if (pc.allowed_hours !== null && pc.allowed_hours !== undefined && scopeAllows(pc.activity)) {
+      allowedByPort[pc.id] = Number(pc.allowed_hours);
+    }
+  });
 
-  const cargoQty = claim.voyages?.cargo_quantity || 0;
-  const allowedHours = (() => {
+  const scopedEvents = events.filter((ev) => {
+    const act = ev.port_calls?.activity;
+    if (!act) return true; // keep untagged events
+    if (!claim.reversible_scope || claim.reversible_scope === "all_ports") return true;
+    if (claim.reversible_scope === "load_only") return act === "load";
+    if (claim.reversible_scope === "discharge_only") return act === "discharge";
+    return true;
+  });
+
+  const deductionsByPort: Record<string, number> = {};
+  scopedEvents.forEach((ev) => {
+    const key = ev.port_call_id || "unassigned";
+    deductionsByPort[key] = (deductionsByPort[key] || 0) + (ev.time_used || 0);
+  });
+
+  // If no per-port allowances, fallback to legacy allowedHours calculation
+  const fallbackAllowed = (() => {
+    const cargoQty = claim.voyages?.cargo_quantity || 0;
     if (!claim.load_discharge_rate || claim.load_discharge_rate <= 0) return null;
     if (claim.load_discharge_rate_unit === "per_hour") {
       return cargoQty / claim.load_discharge_rate;
@@ -277,7 +330,53 @@ function Summary({
     return (cargoQty / claim.load_discharge_rate) * 24;
   })();
 
-  const timeOver = allowedHours !== null && usedHours !== null ? allowedHours - usedHours : null;
+  const allowedValues = Object.values(allowedByPort).filter((n) => !Number.isNaN(n));
+  const totalAllowed =
+    allowedValues.length > 0
+      ? allowedValues.reduce((a, b) => a + (b || 0), 0)
+      : fallbackAllowed;
+
+  // Base laytime span (laytime_end - laytime_start). If missing, we'll later fallback to allowed time.
+  const baseDuration = (() => {
+    if (claim.laytime_start && claim.laytime_end) {
+      const start = new Date(claim.laytime_start).getTime();
+      const end = new Date(claim.laytime_end).getTime();
+      if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
+        return (end - start) / (1000 * 60 * 60);
+      }
+    }
+    return 0;
+  })();
+
+  const totalDeductions = Object.values(deductionsByPort).reduce((a, b) => a + (b || 0), 0);
+  const loadDeductions = scopedEvents
+    .filter((ev) => ev.port_calls?.activity === "load")
+    .reduce((sum, ev) => sum + (ev.time_used || 0), 0);
+
+  // If we have port calls with allowed hours, allocate base duration proportionally to allowed hours (or wholly to a single port call when set).
+  const baseByPort: Record<string, number> = {};
+  const totalAllowedForSplit = Object.values(allowedByPort).reduce((a, b) => a + (b || 0), 0);
+  if (claim.port_call_id && baseDuration > 0) {
+    baseByPort[claim.port_call_id] = baseDuration;
+  } else if (totalAllowedForSplit > 0 && baseDuration > 0) {
+    Object.entries(allowedByPort).forEach(([id, allowed]) => {
+      baseByPort[id] = (allowed / totalAllowedForSplit) * baseDuration;
+    });
+  }
+
+  const usedByPort: Record<string, number> = {};
+  Object.entries(baseByPort).forEach(([id, base]) => {
+    const deductions = deductionsByPort[id] || 0;
+    usedByPort[id] = Math.max(base - deductions, 0);
+  });
+
+  // Pooled used time (laytime span minus all deductions). This is the primary figure for demurrage/despatch.
+  const pooledUsed = Math.max(baseDuration - totalDeductions, 0);
+
+  // Include unassigned deductions in pooled view; per-port cards only show their own deductions/base.
+  const totalUsed = Object.keys(baseByPort).length > 0 ? pooledUsed : pooledUsed;
+
+  const timeOver = totalAllowed !== null ? (totalAllowed || 0) - totalUsed : null;
 
   const demRate = claim.demurrage_rate || 0;
   const despatchRate =
@@ -290,46 +389,131 @@ function Summary({
   const despatch =
     timeOver !== null && timeOver > 0 ? timeOver * (despatchRate / 24) : 0;
 
+  // Build per-port breakdown (including unassigned)
+  const breakdown = [
+    ...Object.entries(allowedByPort).map(([id, allowed]) => ({
+      id,
+      label: claim.port_calls?.find((p) => p.id === id)?.port_name || "Port",
+      activity: claim.port_calls?.find((p) => p.id === id)?.activity || "",
+      allowed,
+      base: baseByPort[id],
+      deductions: deductionsByPort[id] || 0,
+      used: usedByPort[id] || 0,
+    })),
+  ];
+  // Add any ports that have usage but no allowance (e.g., unassigned or missing allowed_hours)
+  Object.entries(usedByPort).forEach(([id, used]) => {
+    if (id === "unassigned") return;
+    if (!breakdown.find((b) => b.id === id)) {
+      breakdown.push({
+        id,
+        label: claim.port_calls?.find((p) => p.id === id)?.port_name || "Port",
+        activity: claim.port_calls?.find((p) => p.id === id)?.activity || "",
+        allowed: allowedByPort[id],
+        base: baseByPort[id],
+        deductions: deductionsByPort[id] || 0,
+        used,
+      });
+    }
+  });
+  // Track unassigned usage separately
+  if (deductionsByPort["unassigned"]) {
+    breakdown.push({
+      id: "unassigned",
+      label: "Unassigned events",
+      activity: "",
+      allowed: undefined,
+      base: undefined,
+      deductions: deductionsByPort["unassigned"],
+      used: 0,
+    });
+  }
+
   return (
-    <div className="grid md:grid-cols-4 gap-4">
-      <div className="p-4 bg-gradient-to-br from-blue-50 to-white border border-blue-100 rounded-xl shadow-sm">
-        <p className="text-sm text-blue-700 font-semibold">Allowed Time</p>
-        <p className="text-3xl font-bold text-blue-900">
-          {allowedHours !== null ? formatHours(allowedHours, timeFormat) : "—"}
-        </p>
+    <div className="space-y-4">
+      <div className="grid md:grid-cols-4 gap-4">
+        <div className="p-4 bg-gradient-to-br from-blue-50 to-white border border-blue-100 rounded-xl shadow-sm">
+          <p className="text-sm text-blue-700 font-semibold">Allowed Time</p>
+          <p className="text-3xl font-bold text-blue-900">
+            {totalAllowed !== null ? formatHours(totalAllowed, timeFormat) : "—"}
+          </p>
+        </div>
+        <div className="p-4 bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-xl shadow-sm">
+          <p className="text-sm text-indigo-700 font-semibold">Used (Laytime - Deductions)</p>
+          <p className="text-3xl font-bold text-indigo-900">
+            {formatHours(totalUsed, timeFormat)}
+          </p>
+        </div>
+        <div className="p-4 bg-gradient-to-br from-amber-50 to-white border border-amber-100 rounded-xl shadow-sm">
+          <p className="text-sm text-amber-700 font-semibold">Over / Under</p>
+          <p
+            className={`text-3xl font-bold ${
+              timeOver !== null
+                ? timeOver >= 0
+                  ? "text-emerald-700"
+                  : "text-red-700"
+                : "text-slate-800"
+            }`}
+          >
+            {timeOver !== null ? formatHours(timeOver, timeFormat) : "—"}
+          </p>
+        </div>
+        <div className="p-4 bg-gradient-to-br from-emerald-50 to-white border border-emerald-100 rounded-xl shadow-sm">
+          <p className="text-sm text-emerald-700 font-semibold">Result</p>
+          <p className="text-lg font-semibold text-emerald-900">
+            {timeOver === null
+              ? "—"
+              : timeOver > 0
+              ? `Despatch ${currency(despatch, claim.despatch_currency || claim.demurrage_currency || "USD")}`
+              : timeOver < 0
+              ? `Demurrage ${currency(demurrage, claim.demurrage_currency || "USD")}`
+              : "No demurrage/despatch"}
+          </p>
+        </div>
       </div>
-      <div className="p-4 bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-xl shadow-sm">
-        <p className="text-sm text-indigo-700 font-semibold">Used (Laytime - Deductions)</p>
-        <p className="text-3xl font-bold text-indigo-900">
-          {usedHours !== null ? formatHours(usedHours, timeFormat) : "—"}
-        </p>
-      </div>
-      <div className="p-4 bg-gradient-to-br from-amber-50 to-white border border-amber-100 rounded-xl shadow-sm">
-        <p className="text-sm text-amber-700 font-semibold">Over / Under</p>
-        <p
-          className={`text-3xl font-bold ${
-            timeOver !== null
-              ? timeOver >= 0
-                ? "text-emerald-700"
-                : "text-red-700"
-              : "text-slate-800"
-          }`}
-        >
-          {timeOver !== null ? formatHours(timeOver, timeFormat) : "—"}
-        </p>
-      </div>
-      <div className="p-4 bg-gradient-to-br from-emerald-50 to-white border border-emerald-100 rounded-xl shadow-sm">
-        <p className="text-sm text-emerald-700 font-semibold">Result</p>
-        <p className="text-lg font-semibold text-emerald-900">
-          {timeOver === null
-            ? "—"
-            : timeOver > 0
-            ? `Despatch ${currency(despatch, claim.despatch_currency || claim.demurrage_currency || "USD")}`
-            : timeOver < 0
-            ? `Demurrage ${currency(demurrage, claim.demurrage_currency || "USD")}`
-            : "No demurrage/despatch"}
-        </p>
-      </div>
+
+      {breakdown.length > 0 && (
+        <div className="p-4 border border-slate-200 rounded-xl bg-white">
+          <p className="text-sm font-semibold text-slate-700 mb-3">
+            Per-port breakdown (scope-aware)
+          </p>
+          <div className="grid md:grid-cols-3 gap-3">
+            {breakdown.map((b) => {
+              const over = b.allowed !== undefined && b.allowed !== null ? (b.allowed || 0) - (b.used || 0) : null;
+              return (
+                <div key={b.id} className="p-3 rounded-lg border border-slate-100 bg-slate-50">
+                  <p className="font-semibold text-slate-900">
+                    {b.label} {b.activity ? `(${b.activity})` : ""}
+                  </p>
+          <p className="text-sm text-slate-600">Allowed: {b.allowed !== undefined && b.allowed !== null ? formatHours(b.allowed, timeFormat) : "—"}</p>
+          {b.base !== undefined && b.base !== null && (
+            <p className="text-sm text-slate-600">Base (laytime span): {formatHours(b.base, timeFormat)}</p>
+          )}
+          <p className="text-sm text-slate-600">Deductions: {formatHours(b.deductions || 0, timeFormat)}</p>
+          <p className="text-sm text-slate-600">Used: {formatHours(b.used || 0, timeFormat)}</p>
+          <p className={`text-sm font-semibold ${over !== null ? (over >= 0 ? "text-emerald-700" : "text-red-700") : "text-slate-600"}`}>
+            Over/Under: {over !== null ? formatHours(over, timeFormat) : "—"}
+          </p>
+        </div>
+      );
+    })}
+          </div>
+        </div>
+      )}
+
+      {totalAllowed !== null && (
+        <div className="p-4 border border-blue-100 rounded-xl bg-blue-50">
+          <p className="text-sm text-blue-700 font-semibold">
+            Pooled allowance minus load deductions (for discharge view)
+          </p>
+          <p className="text-lg font-bold text-blue-900">
+            {formatHours(totalAllowed - loadDeductions, timeFormat)}
+          </p>
+          <p className="text-xs text-blue-700 mt-1">
+            Total allowed across ports minus deductions tagged to load ports. Use this as the remaining allowance for discharge claims when laytime is reversible across ports.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -342,6 +526,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   const [terms, setTerms] = useState<{ id: string; name: string }[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [audit, setAudit] = useState<AuditRow[]>([]);
+  const [portCalls, setPortCalls] = useState<{ id: string; port_name: string; activity?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingClaim, setSavingClaim] = useState(false);
@@ -365,6 +550,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
         setEvents(json.events || []);
         if (json.terms) setTerms(json.terms);
         if (json.audit) setAudit(json.audit);
+        if (json.claim?.port_calls) setPortCalls(json.claim.port_calls);
         const aRes = await fetch(`/api/claims/${params.claimId}/attachments`);
         const aJson = await aRes.json();
         if (aRes.ok && aJson.attachments) setAttachments(aJson.attachments);
@@ -447,16 +633,24 @@ export default function CalculationPage({ params }: { params: { claimId: string 
     }
   };
 
-  const enhancedEvents = useMemo(
-    () =>
-      events.map((ev) => ({
-        ...ev,
-        time_used:
-          ev.time_used ??
-          durationHours(ev.from_datetime, ev.to_datetime, ev.rate_of_calculation),
-      })),
-    [events]
-  );
+  const enhancedEvents = useMemo(() => {
+    const scopedEvents = events.map((ev) => {
+      const time_used =
+        ev.time_used ??
+        durationHours(ev.from_datetime, ev.to_datetime, ev.rate_of_calculation);
+      return { ...ev, time_used };
+    });
+    if (!claim?.reversible || !claim.reversible_scope || claim.reversible_scope === "all_ports") {
+      return scopedEvents;
+    }
+    return scopedEvents.filter((ev) => {
+      const act = ev.port_calls?.activity;
+      if (!act) return true; // keep untagged events
+      if (claim.reversible_scope === "load_only") return act === "load";
+      if (claim.reversible_scope === "discharge_only") return act === "discharge";
+      return true;
+    });
+  }, [events, claim?.reversible, claim?.reversible_scope]);
 
   const handleClaimFieldChange = (field: keyof Claim, value: any) => {
     setClaimForm((prev) => ({ ...prev, [field]: value }));
@@ -555,6 +749,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
           </h1>
           <p className="text-xs text-slate-600">
             Reversible: {claim.reversible ? "Yes" : "No"} {claim.reversible_scope ? `(${claim.reversible_scope.replace("_"," ")})` : ""}
+            {claim.port_calls?.[0]?.port_name ? ` · Port Call: ${claim.port_calls[0].port_name} (${claim.port_calls[0].activity || ""})` : ""}
           </p>
         </div>
         <div className="flex items-start gap-6 text-sm text-gray-700">
@@ -576,6 +771,12 @@ export default function CalculationPage({ params }: { params: { claimId: string 
           </div>
         </div>
       </div>
+
+      {claim.reversible && claim.reversible_scope && claim.reversible_scope !== "all_ports" && (
+        <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          Reversible scope is limited to: {claim.reversible_scope.replace("_", " ")}. Ensure events/ports match this scope when interpreting results.
+        </div>
+      )}
 
       <Summary events={enhancedEvents} claim={{ ...claim, ...claimForm } as Claim} timeFormat={timeFormat} />
 
@@ -728,6 +929,23 @@ export default function CalculationPage({ params }: { params: { claimId: string 
               />
               <Label htmlFor="rev2" className="text-sm">Reversible laytime</Label>
             </div>
+            {claimForm.reversible && (
+              <div className="mt-2">
+                <Select
+                  value={(claimForm.reversible_scope as any) || "all_ports"}
+                  onValueChange={(v: any) => handleClaimFieldChange("reversible_scope", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all_ports">All ports</SelectItem>
+                    <SelectItem value="load_only">Load ports only</SelectItem>
+                    <SelectItem value="discharge_only">Discharge ports only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           <div className="col-span-12 md:col-span-6 space-y-1">
@@ -829,6 +1047,8 @@ export default function CalculationPage({ params }: { params: { claimId: string 
           editing={editingEvent}
           clearEdit={() => setEditingEvent(null)}
           loading={saving}
+          portCalls={portCalls}
+          claimPortCallId={claim.port_call_id}
         />
 
         <div className="border-t border-slate-200" />

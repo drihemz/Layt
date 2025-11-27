@@ -40,11 +40,12 @@ interface Props {
   terms: Term[];
   defaultVoyageId?: string;
   defaultPortCallId?: string;
+  initialOpen?: boolean;
 }
 
-export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defaultVoyageId, defaultPortCallId }: Props) {
+export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defaultVoyageId, defaultPortCallId, initialOpen = false }: Props) {
   useSession(); // keep session provider engaged if needed later
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>(tenantId || "");
 
@@ -83,7 +84,7 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
   const [termText, setTermText] = useState("");
   const [previewAllowed, setPreviewAllowed] = useState<string>("—");
   const [portCalls, setPortCalls] = useState<{ id: string; port_name: string; activity?: string | null }[]>([]);
-  const [portCallId, setPortCallId] = useState<string>("");
+  const [portCallId, setPortCallId] = useState<string>("none");
 
   const resetForm = () => {
     setClaimRef("");
@@ -132,8 +133,11 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
 
   useEffect(() => {
     if (tenantId) setSelectedTenantId(tenantId);
+  }, [tenantId]);
+
+  useEffect(() => {
     if (defaultVoyageId) setVoyageId(defaultVoyageId);
-  }, [tenantId, defaultVoyageId]);
+  }, [defaultVoyageId]);
 
   useEffect(() => {
     async function fetchPorts() {
@@ -290,7 +294,7 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
         turn_time_method: turnTimeMethod || null,
         term_id: selectedTermId || null,
         reversible_scope: reversibleScope || "all_ports",
-        port_call_id: portCallId || null,
+        port_call_id: portCallId === "none" ? null : portCallId,
       };
       if (isSuperAdmin) {
         payload.tenant_id = selectedTenantId;
@@ -424,20 +428,21 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
               {portCalls.length > 0 && (
                 <div className="col-span-12 md:col-span-6 space-y-1">
                   <Label>Port Call</Label>
-                  <Select value={portCallId} onValueChange={(v) => setPortCallId(v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a port call" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {portCalls.map((pc) => (
-                        <SelectItem key={pc.id} value={pc.id}>
-                          {pc.port_name} · {pc.activity || "other"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+          <Select value={portCallId} onValueChange={(v) => setPortCallId(v)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a port call" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              {portCalls.map((pc) => (
+                <SelectItem key={pc.id} value={pc.id}>
+                  {pc.port_name} · {pc.activity || "other"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
               <div className="col-span-12 md:col-span-4 space-y-1 relative">
                 <Label htmlFor="port">Port</Label>
                 <Input

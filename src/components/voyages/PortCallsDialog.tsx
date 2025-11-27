@@ -25,6 +25,7 @@ type PortCall = {
   sequence?: number | null;
   status?: string | null;
   notes?: string | null;
+  allowed_hours?: number | null;
 };
 
 export function PortCallsDialog({ voyageId, onChange }: { voyageId: string; onChange: () => void }) {
@@ -138,6 +139,14 @@ export function PortCallsDialog({ voyageId, onChange }: { voyageId: string; onCh
               </Select>
             </div>
             <div className="space-y-1">
+              <Label>Allowed Hours</Label>
+              <Input
+                type="number"
+                value={form.allowed_hours ?? ""}
+                onChange={(e) => setForm((p) => ({ ...p, allowed_hours: e.target.value ? Number(e.target.value) : null }))}
+              />
+            </div>
+            <div className="space-y-1">
               <Label>ETA</Label>
               <Input type="datetime-local" value={(form.eta as any) || ""} onChange={(e) => setForm((p) => ({ ...p, eta: e.target.value }))} />
             </div>
@@ -164,10 +173,12 @@ export function PortCallsDialog({ voyageId, onChange }: { voyageId: string; onCh
                 <div key={pc.id} className="p-2 border rounded-lg flex items-center justify-between">
                   <div>
                     <p className="font-semibold">{pc.port_name} · {pc.activity}</p>
-                    <p className="text-xs text-slate-500">ETA {pc.eta || "—"} · ETD {pc.etd || "—"} · Seq {pc.sequence || "—"}</p>
+                    <p className="text-xs text-slate-500">
+                      ETA {pc.eta || "—"} · ETD {pc.etd || "—"} · Seq {pc.sequence || "—"} · Allowed {pc.allowed_hours ?? "—"} hrs
+                    </p>
                   </div>
                   <div className="space-x-2">
-                    <Button size="sm" variant="outline" onClick={() => { window.location.href = `/claims?voyageId=${voyageId}&portCallId=${pc.id}`; }}>Create Claim</Button>
+                    <Button size="sm" variant="outline" onClick={() => { window.location.href = `/claims?voyageId=${voyageId}&portCallId=${pc.id}&openCreate=1`; }}>Create Claim</Button>
                     <Button size="sm" variant="ghost" onClick={() => editRow(pc)}>Edit</Button>
                     <Button size="sm" variant="ghost" className="text-red-600" onClick={() => delRow(pc.id)}>Delete</Button>
                   </div>

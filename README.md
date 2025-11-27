@@ -82,14 +82,15 @@ npm run dev
   - Use the service-role client only after server-side validation and apply `tenant_id` when mutating lookup tables.
 
 ## Current Highlights (see TODO.md for full list)
-- Voyages: create/edit/delete, type-ahead lookups + request-new, plan limits; port calls management (multi-port legs with ETA/ETD/activity/status/sequence).
-- Claims: extended laytime fields, calculator with SOF events (edit/delete), audit trail, attachments (NOR/SOF), time-format toggle, reversible scope (load-only/discharge-only/all ports), allowed-time preview in create.
+- Voyages: create/edit/delete, type-ahead lookups + request-new, plan limits; port calls management (multi-port legs with ETA/ETD/activity/status/sequence + allowed hours for pooling).
+- Claims: extended laytime fields, calculator with SOF events (edit/delete), audit trail, attachments (NOR/SOF), time-format toggle, reversible scope (load-only/discharge-only/all ports) with scope-aware per-port allowed-time pooling, allowed-time preview in create.
 - Data Management: tenant/public lookups, plan-based tab gating, request-new flow.
 - Plans/Billing: plan limits (voyages/claims/month/seats), tenant plan assignment, invoices list/mark paid, usage/limits displayed, seat enforcement on user creation.
 - Admin: dashboards, tenant page with usage vs limits, plans editable with data tab toggles.
 
 ## Pending / Planned (summary)
 - PDF export of laytime statement (pending dependency install).
+- Reversible scope enforcement across ports (deeper per-port breakdowns when pooling is off).
 - Voyage port calls UI polish and claims-from-port-calls workflow.
 - Holidays/terms library, bulk import/dedupe for lookups.
 - Automated invoice scheduler; deeper laytime engine, collaboration, analytics.

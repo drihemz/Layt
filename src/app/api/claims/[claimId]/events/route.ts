@@ -31,6 +31,8 @@ async function loadClaim(supabase: ReturnType<typeof createServerClient>, claimI
         "despatch_currency",
         "operation_type",
         "port_name",
+        "port_call_id",
+        "reversible_scope",
         "laycan_start",
         "laycan_end",
         "load_discharge_rate",
@@ -58,6 +60,8 @@ async function loadClaim(supabase: ReturnType<typeof createServerClient>, claimI
   }
 
   let voyageData = null;
+  let portCallData = null;
+  let voyagePortCalls: any[] = [];
   if (claim.voyage_id) {
     const { data: voyage, error: voyageError } = await supabase
       .from("voyages")
@@ -69,9 +73,28 @@ async function loadClaim(supabase: ReturnType<typeof createServerClient>, claimI
     } else {
       voyageData = voyage;
     }
+    const { data: pcs } = await supabase
+      .from("port_calls")
+      .select("id, port_name, activity, sequence, eta, etd, status, allowed_hours")
+      .eq("voyage_id", claim.voyage_id)
+      .order("sequence", { ascending: true });
+    voyagePortCalls = pcs || [];
+  }
+  if (claim.port_call_id) {
+    const { data: pc } = await supabase
+      .from("port_calls")
+      .select("id, port_name, activity, sequence, eta, etd, status, allowed_hours")
+      .eq("id", claim.port_call_id)
+      .maybeSingle();
+    if (pc) portCallData = pc;
   }
 
-  return { claim: { ...claim, voyages: voyageData } };
+  const combinedPortCalls = [...voyagePortCalls];
+  if (portCallData && !combinedPortCalls.find((p) => p.id === portCallData.id)) {
+    combinedPortCalls.push(portCallData);
+  }
+
+  return { claim: { ...claim, voyages: voyageData, port_calls: combinedPortCalls } };
 }
 
 export async function GET(
@@ -98,7 +121,7 @@ export async function GET(
 
   const { data: events, error: eventsError } = await supabase
     .from("calculation_events")
-    .select("*")
+    .select("*, port_calls(id, port_name, activity)")
     .eq("claim_id", params.claimId)
     .order("row_order", { ascending: true });
 
@@ -106,6 +129,15 @@ export async function GET(
     console.error("Error fetching events", eventsError);
     return NextResponse.json({ error: "Failed to load events" }, { status: 500 });
   }
+
+  // Ensure time_used is always populated for downstream calculations
+  const hydratedEvents =
+    events?.map((ev: any) => ({
+      ...ev,
+      time_used:
+        ev.time_used ??
+        hoursBetween(ev.from_datetime, ev.to_datetime, ev.rate_of_calculation),
+    })) ?? [];
 
   // Also return available terms for this tenant (or public) so the calculator has a guaranteed list.
   const termsFilter = claim.tenant_id
@@ -124,7 +156,7 @@ export async function GET(
     .order("created_at", { ascending: false })
     .limit(50);
 
-  return NextResponse.json({ claim, events, terms: terms || [], audit: audit || [] });
+  return NextResponse.json({ claim, events: hydratedEvents, terms: terms || [], audit: audit || [] });
 }
 
 export async function POST(
@@ -156,6 +188,7 @@ export async function POST(
       from_datetime,
       to_datetime,
       rate_of_calculation = 100,
+      port_call_id,
     } = body || {};
 
     if (!deduction_name || !from_datetime || !to_datetime) {
@@ -175,6 +208,7 @@ export async function POST(
       from_datetime,
       to_datetime,
       rate_of_calculation,
+      port_call_id: port_call_id || null,
       time_used,
       row_order,
     } as Record<string, any>;
@@ -213,7 +247,7 @@ export async function PUT(
   }
   try {
     const body = await req.json();
-    const { id, deduction_name, from_datetime, to_datetime, rate_of_calculation = 100 } = body || {};
+    const { id, deduction_name, from_datetime, to_datetime, rate_of_calculation = 100, port_call_id } = body || {};
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
     const { data: existing, error: fetchError } = await supabase.from("calculation_events").select("*").eq("id", id).single();
     if (fetchError || !existing) return NextResponse.json({ error: "Event not found" }, { status: 404 });
@@ -226,6 +260,7 @@ export async function PUT(
         from_datetime: from_datetime ?? existing.from_datetime,
         to_datetime: to_datetime ?? existing.to_datetime,
         rate_of_calculation,
+        port_call_id: port_call_id ?? existing.port_call_id,
         time_used,
       })
       .eq("id", id)

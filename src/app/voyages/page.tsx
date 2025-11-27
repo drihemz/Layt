@@ -13,7 +13,7 @@ async function getVoyagesData(tenantId: string, search: string, page: number) {
   let voyagesQuery = supabase
     .from("voyages")
     .select(`
-      id, voyage_reference, vessel_id, voyage_number, created_at,
+      id, voyage_reference, vessel_id, voyage_number, created_at, tenant_id,
       vessels(name),
       owner:owner_id(name),
       charterer:charterer_id(name),
