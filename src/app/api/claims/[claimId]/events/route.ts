@@ -12,7 +12,14 @@ function hoursBetween(from: string, to: string, rate: number) {
   return +(hours * multiplier).toFixed(2);
 }
 
-async function loadClaim(supabase: ReturnType<typeof createServerClient>, claimId: string) {
+type LoadedClaim =
+  | { claim: any; error?: undefined }
+  | { claim?: undefined; error: string };
+
+async function loadClaim(
+  supabase: ReturnType<typeof createServerClient>,
+  claimId: string
+): Promise<LoadedClaim> {
   // Minimal column selection to avoid schema cache issues; fetch voyage separately.
   const { data: claim, error } = await supabase
     .from("claims")
@@ -51,13 +58,7 @@ async function loadClaim(supabase: ReturnType<typeof createServerClient>, claimI
     .eq("id", claimId)
     .single();
 
-  if (error) {
-    console.error("loadClaim error", error);
-    return { error: error.message || "Claim not found" };
-  }
-  if (!claim) {
-    return { error: "Claim not found" };
-  }
+  if (error || !claim) return { error: error?.message || "Claim not found" };
 
   let voyageData = null;
   let portCallData = null;
@@ -112,9 +113,11 @@ export async function GET(
     return NextResponse.json({ error: "Claim not found" }, { status: 404 });
   }
 
+  const claimAny: any = claim;
+
   if (
     session.user.role !== "super_admin" &&
-    session.user.tenantId !== claim.tenant_id
+    session.user.tenantId !== claimAny.tenant_id
   ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -140,8 +143,8 @@ export async function GET(
     })) ?? [];
 
   // Also return available terms for this tenant (or public) so the calculator has a guaranteed list.
-  const termsFilter = claim.tenant_id
-    ? `tenant_id.eq.${claim.tenant_id},is_public.eq.true`
+  const termsFilter = claimAny.tenant_id
+    ? `tenant_id.eq.${claimAny.tenant_id},is_public.eq.true`
     : "is_public.eq.true";
   const { data: terms } = await supabase
     .from("terms")
@@ -173,10 +176,11 @@ export async function POST(
   if (error || !claim) {
     return NextResponse.json({ error: "Claim not found" }, { status: 404 });
   }
+  const claimAny: any = claim;
 
   if (
     session.user.role !== "super_admin" &&
-    session.user.tenantId !== claim.tenant_id
+    session.user.tenantId !== claimAny.tenant_id
   ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -203,7 +207,7 @@ export async function POST(
 
     const insertPayload = {
       claim_id: params.claimId,
-      tenant_id: claim.tenant_id,
+      tenant_id: claimAny.tenant_id,
       deduction_name,
       from_datetime,
       to_datetime,
@@ -242,7 +246,8 @@ export async function PUT(
   const supabase = createServerClient();
   const { claim, error } = await loadClaim(supabase, params.claimId);
   if (error || !claim) return NextResponse.json({ error: "Claim not found" }, { status: 404 });
-  if (session.user.role !== "super_admin" && session.user.tenantId !== claim.tenant_id) {
+  const claimAny: any = claim;
+  if (session.user.role !== "super_admin" && session.user.tenantId !== claimAny.tenant_id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
@@ -285,7 +290,8 @@ export async function DELETE(
   const supabase = createServerClient();
   const { claim, error } = await loadClaim(supabase, params.claimId);
   if (error || !claim) return NextResponse.json({ error: "Claim not found" }, { status: 404 });
-  if (session.user.role !== "super_admin" && session.user.tenantId !== claim.tenant_id) {
+  const claimAny: any = claim;
+  if (session.user.role !== "super_admin" && session.user.tenantId !== claimAny.tenant_id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
