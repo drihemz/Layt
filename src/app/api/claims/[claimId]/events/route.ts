@@ -97,7 +97,8 @@ async function loadClaim(
     combinedPortCalls.push(portCallData);
   }
 
-  return { claim: { ...claim, voyages: voyageData, port_calls: combinedPortCalls } };
+  const claimObj = typeof claim === "object" && claim !== null ? claim : {};
+  return { claim: { ...(claimObj as any), voyages: voyageData, port_calls: combinedPortCalls } };
 }
 
 export async function GET(
