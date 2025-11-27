@@ -50,7 +50,6 @@ type Claim = {
   loading_start_at?: string | null;
   loading_end_at?: string | null;
   turn_time_method?: string | null;
-  term_id?: string | null;
   voyages?: {
     cargo_quantity?: number | null;
     cargo_names?: { name?: string | null } | null;
