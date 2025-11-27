@@ -94,16 +94,17 @@ export async function POST(req: Request) {
 
     // Enforce claim limits from plan
     const tenantPlan = await getTenantPlan(supabase, tenantIdToUse);
-    if (tenantPlan?.plans?.max_claims) {
+    const plan = Array.isArray(tenantPlan?.plans) ? tenantPlan.plans[0] : tenantPlan?.plans;
+    if (plan?.max_claims) {
       const { count } = await supabase
         .from("claims")
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantIdToUse);
-      if ((count || 0) >= tenantPlan.plans.max_claims) {
+      if ((count || 0) >= plan.max_claims) {
         return NextResponse.json({ error: "Claim limit reached for this tenant plan." }, { status: 403 });
       }
     }
-    if (tenantPlan?.plans?.max_claims_per_month) {
+    if (plan?.max_claims_per_month) {
       const start = new Date(); start.setDate(1); start.setHours(0,0,0,0);
       const end = new Date(start); end.setMonth(start.getMonth() + 1);
       const { count } = await supabase
@@ -112,7 +113,7 @@ export async function POST(req: Request) {
         .eq("tenant_id", tenantIdToUse)
         .gte("created_at", start.toISOString())
         .lt("created_at", end.toISOString());
-      if ((count || 0) >= tenantPlan.plans.max_claims_per_month) {
+      if ((count || 0) >= plan.max_claims_per_month) {
         return NextResponse.json({ error: "Monthly claim limit reached for this tenant plan." }, { status: 403 });
       }
     }
