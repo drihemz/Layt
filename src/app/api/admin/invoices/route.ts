@@ -52,6 +52,7 @@ export async function POST() {
 
   const inserts = [];
   for (const tp of activeTenantPlans || []) {
+    const plan = Array.isArray(tp.plans) ? tp.plans[0] : (tp.plans as any);
     // skip if invoice already exists for tenant/period
     const { data: existing } = await supabase
       .from("invoices")
@@ -66,8 +67,8 @@ export async function POST() {
       plan_id: tp.plan_id,
       period_start: periodStartStr,
       period_end: periodEndStr,
-      amount_cents: tp.plans?.price_cents || 0,
-      currency: tp.plans?.currency || "USD",
+      amount_cents: plan?.price_cents || 0,
+      currency: plan?.currency || "USD",
       status: "due",
       due_date: periodEndStr,
       notes: "Auto-generated invoice",
