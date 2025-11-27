@@ -28,7 +28,10 @@ async function loadClaims(tenantId?: string, search?: string) {
     console.error("Error fetching claims", error);
     return [];
   }
-  return data || [];
+  return (data || []).map((c: any) => ({
+    ...c,
+    voyages: Array.isArray(c.voyages) ? c.voyages[0] : c.voyages || null,
+  }));
 }
 
 async function loadVoyages(tenantId?: string) {
