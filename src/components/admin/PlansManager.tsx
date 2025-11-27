@@ -15,6 +15,7 @@ type Plan = {
   max_admins?: number | null;
   max_operators?: number | null;
   allow_data_management?: boolean;
+  data_tabs?: Record<string, boolean> | null;
   max_voyages?: number | null;
   max_claims?: number | null;
   max_claims_per_month?: number | null;

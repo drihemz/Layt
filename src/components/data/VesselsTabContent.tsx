@@ -20,6 +20,7 @@ interface Vessel {
   vessel_type: string;
   flag: string;
   dwt: number;
+  is_public?: boolean;
   tenantName?: string | null;
 }
 

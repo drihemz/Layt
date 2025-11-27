@@ -30,16 +30,34 @@ export async function getLookupData(session: Session) {
     supabase.from("cargo_names").select('*'),
     supabase.from("charter_parties").select('*'),
     supabase.from("terms").select('*'),
-    session.user.role === 'super_admin' ? supabase.from('tenants').select('*') : Promise.resolve({ data: [] }),
+    session.user.role === 'super_admin' ? supabase.from('tenants').select('*') : Promise.resolve({ data: [], error: null }),
   ]);
 
-  if (partiesRes.error || vesselsRes.error || portsRes.error || cargoNamesRes.error || charterPartiesRes.error || termsRes.error || tenantsRes.error) {
-    console.error("Error fetching lookup data:", partiesRes.error || vesselsRes.error || portsRes.error || cargoNamesRes.error || charterPartiesRes.error || termsRes.error || tenantsRes.error);
+  const anyError =
+    (partiesRes as any).error ||
+    (vesselsRes as any).error ||
+    (portsRes as any).error ||
+    (cargoNamesRes as any).error ||
+    (charterPartiesRes as any).error ||
+    (termsRes as any).error ||
+    (tenantsRes as any).error;
+
+  if (anyError) {
+    console.error(
+      "Error fetching lookup data:",
+      (partiesRes as any).error ||
+        (vesselsRes as any).error ||
+        (portsRes as any).error ||
+        (cargoNamesRes as any).error ||
+        (charterPartiesRes as any).error ||
+        (termsRes as any).error ||
+        (tenantsRes as any).error
+    );
     return { parties: [], vessels: [], ports: [], cargoNames: [], charterParties: [], terms: [], tenants: [] };
   }
 
   const tenantMap = new Map<string, string>();
-  (tenantsRes.data || []).forEach((t: any) => tenantMap.set(t.id, t.name));
+  ((tenantsRes as any).data || []).forEach((t: any) => tenantMap.set(t.id, t.name));
 
   const attachTenantName = (rows: any[]) =>
     (rows || []).map((row) => ({

@@ -82,8 +82,8 @@ export function PartyDialog({ party, children, session }: PartyDialogProps) {
       const { tenantName, ...rest } = party as any;
       setFormData(rest);
       setIsPublic(party?.is_public || false);
-      if (isSuperAdmin && party?.tenant_id) {
-        setSelectedTenantId(party.tenant_id);
+      if (isSuperAdmin && (party as any)?.tenant_id) {
+        setSelectedTenantId((party as any).tenant_id);
       }
     } else {
       setFormData({

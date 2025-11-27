@@ -24,13 +24,22 @@ async function loadVoyage(voyageId: string, tenantId?: string, role?: string) {
   if (error || !voyage) return null;
   if (role !== "super_admin" && tenantId && voyage.tenant_id !== tenantId) return null;
 
+  // Normalize single relations (Supabase can return arrays for joins)
+  const normalizedVoyage: any = {
+    ...voyage,
+    vessels: Array.isArray(voyage.vessels) ? voyage.vessels[0] : voyage.vessels || null,
+    cargo_names: Array.isArray(voyage.cargo_names) ? voyage.cargo_names[0] : voyage.cargo_names || null,
+    owner: Array.isArray(voyage.owner) ? voyage.owner[0] : voyage.owner || null,
+    charterer: Array.isArray(voyage.charterer) ? voyage.charterer[0] : voyage.charterer || null,
+  };
+
   const claimsQuery = supabase
     .from("claims")
     .select("id, claim_reference, claim_status, port_call_id")
     .eq("voyage_id", voyageId);
   const { data: claims } = await claimsQuery;
 
-  return { voyage, claims: claims || [] };
+  return { voyage: normalizedVoyage, claims: claims || [] };
 }
 
 export default async function VoyageDetailPage({ params }: { params: { voyageId: string } }) {

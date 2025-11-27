@@ -32,6 +32,8 @@ export async function getTenantPlanUsage(tenantId: string): Promise<TenantPlanUs
       .maybeSingle(),
   ]);
 
+  const plan = Array.isArray(tp?.plans) ? tp?.plans[0] : tp?.plans;
+
   // usage counts
   const [adminsCount, operatorsCount, voyagesCount, claimsCount, claimsMonthCount] = await Promise.all([
     supabase.from("users").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("role", "customer_admin").eq("is_active", true),
@@ -54,12 +56,12 @@ export async function getTenantPlanUsage(tenantId: string): Promise<TenantPlanUs
   return {
     tenant_id: tenantId,
     plan_id: tp?.plan_id || null,
-    plan_name: tp?.plans?.name || null,
-    allow_data_management: tp?.plans?.allow_data_management ?? true,
-    data_tabs: (tp?.plans?.data_tabs as any) || {},
-    max_voyages: tp?.plans?.max_voyages ?? null,
-    max_claims: tp?.plans?.max_claims ?? null,
-    max_claims_per_month: tp?.plans?.max_claims_per_month ?? null,
+    plan_name: plan?.name || null,
+    allow_data_management: plan?.allow_data_management ?? true,
+    data_tabs: (plan?.data_tabs as any) || {},
+    max_voyages: plan?.max_voyages ?? null,
+    max_claims: plan?.max_claims ?? null,
+    max_claims_per_month: plan?.max_claims_per_month ?? null,
     seats_admins: tp?.seats_admins ?? null,
     seats_operators: tp?.seats_operators ?? null,
     usage: {

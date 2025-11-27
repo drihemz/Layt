@@ -19,6 +19,7 @@ interface Party {
   country: string;
   email: string;
   kyc_status: string;
+  is_public?: boolean;
   tenantName?: string | null;
 }
 
