@@ -100,10 +100,10 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const qTenantId = url.searchParams.get('tenant_id');
 
-    let targetTenantId = tenantId;
+    let targetTenantId: string | null = tenantId || null;
     if (role === 'super_admin') {
       // super_admin can provide a tenantId to filter, or see all if not provided
-      targetTenantId = qTenantId || undefined;
+      targetTenantId = qTenantId || null;
     }
 
     // If targetTenantId is provided, include tenant-specific rows + public
