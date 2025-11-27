@@ -421,8 +421,8 @@ function Summary({
       id: "unassigned",
       label: "Unassigned events",
       activity: "",
-      allowed: null,
-      base: null,
+      allowed: 0,
+      base: 0,
       deductions: deductionsByPort["unassigned"],
       used: 0,
     });
