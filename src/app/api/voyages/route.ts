@@ -58,12 +58,13 @@ export async function POST(req: Request) {
 
     // Enforce voyage limit if plan set
     const tenantPlan = await getTenantPlan(supabase, tenantId);
-    if (tenantPlan?.plans?.max_voyages) {
+    const plan = Array.isArray(tenantPlan?.plans) ? tenantPlan.plans[0] : tenantPlan?.plans;
+    if (plan?.max_voyages) {
       const { count } = await supabase
         .from("voyages")
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantId);
-      if ((count || 0) >= tenantPlan.plans.max_voyages) {
+      if ((count || 0) >= plan.max_voyages) {
         return NextResponse.json({ error: "Voyage limit reached for this tenant plan." }, { status: 403 });
       }
     }
