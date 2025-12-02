@@ -46,6 +46,7 @@ async function loadClaim(
         "load_discharge_rate_unit",
         "fixed_rate_duration_hours",
         "reversible",
+        "claim_status",
         "laytime_start",
         "laytime_end",
         "nor_tendered_at",
@@ -54,6 +55,9 @@ async function loadClaim(
         "turn_time_method",
         "term_id",
         "reversible_pool_ids",
+        "qc_status",
+        "qc_reviewer_id",
+        "qc_notes",
       ].join(",")
     )
     .eq("id", claimId)

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Plus } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 
 type Claim = {
   id: string;
@@ -38,6 +39,7 @@ type Claim = {
   port_name?: string | null;
   laycan_start?: string | null;
   laycan_end?: string | null;
+  claim_status?: string | null;
   load_discharge_rate?: number | null;
   load_discharge_rate_unit?: string | null;
   fixed_rate_duration_hours?: number | null;
@@ -45,6 +47,9 @@ type Claim = {
   reversible_scope?: string | null;
   reversible_pool_ids?: string[] | null;
   port_call_id?: string | null;
+  qc_status?: string | null;
+  qc_reviewer_id?: string | null;
+  qc_notes?: string | null;
   laytime_start?: string | null;
   laytime_end?: string | null;
   nor_tendered_at?: string | null;
@@ -89,6 +94,14 @@ type AuditRow = {
   data: any;
 };
 
+type Comment = {
+  id: string;
+  body: string;
+  user_id: string;
+  created_at: string;
+  users?: { full_name?: string | null } | null;
+};
+
 type TimeFormat = "dhms" | "decimal";
 
 type SiblingSummary = {
@@ -103,6 +116,18 @@ type SiblingSummary = {
   deductions: number;
   used: number;
 };
+
+const claimStatusOptions = [
+  { value: "created", label: "Created" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "for_qc", label: "For QC" },
+  { value: "qc_in_progress", label: "QC in Progress" },
+  { value: "pending_reply", label: "Pending Reply" },
+  { value: "missing_information", label: "Missing Information" },
+  { value: "pending_counter_check", label: "Pending Counter Check" },
+  { value: "completed", label: "Completed" },
+  { value: "archived", label: "Archived" },
+];
 
 const formatDate = (value: string) => {
   const d = new Date(value);
@@ -708,13 +733,20 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   const [audit, setAudit] = useState<AuditRow[]>([]);
   const [portCalls, setPortCalls] = useState<{ id: string; port_name: string; activity?: string | null }[]>([]);
   const [siblings, setSiblings] = useState<SiblingSummary[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [qcUsers, setQcUsers] = useState<{ id: string; full_name: string; email: string; role: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingClaim, setSavingClaim] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [postingComment, setPostingComment] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventRow | null>(null);
   const [timeFormat, setTimeFormat] = useState<TimeFormat>("dhms");
+  const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -736,6 +768,36 @@ export default function CalculationPage({ params }: { params: { claimId: string 
         const aRes = await fetch(`/api/claims/${params.claimId}/attachments`);
         const aJson = await aRes.json();
         if (aRes.ok && aJson.attachments) setAttachments(aJson.attachments);
+        setCommentsLoading(true);
+        try {
+          const cRes = await fetch(`/api/claims/${params.claimId}/comments`);
+          const cJson = await cRes.json();
+          if (cRes.ok && cJson.comments) {
+            setComments(cJson.comments);
+          } else if (!cRes.ok) {
+            setCommentError(cJson.error || "Failed to load comments");
+          }
+        } finally {
+          setCommentsLoading(false);
+        }
+        try {
+          const uRes = await fetch("/api/customer-admin/users");
+          const uJson = await uRes.json();
+          if (uRes.ok && uJson.users) {
+            setQcUsers(
+              uJson.users
+                .filter((u: any) => u.is_active !== false)
+                .map((u: any) => ({
+                  id: u.id,
+                  full_name: u.full_name || "User",
+                  email: u.email,
+                  role: u.role,
+                }))
+            );
+          }
+        } catch {
+          // ignore optional user load error
+        }
       } catch (e: any) {
         setError(e.message || "Failed to load");
       } finally {
@@ -744,6 +806,21 @@ export default function CalculationPage({ params }: { params: { claimId: string 
     }
     load();
   }, [params.claimId]);
+
+  useEffect(() => {
+    async function loadSession() {
+      try {
+        const res = await fetch("/api/auth/session");
+        const json = await res.json();
+        if (json?.user?.id) {
+          setCurrentUser({ id: json.user.id, role: json.user.role || "" });
+        }
+      } catch {
+        // ignore session load errors; non-authenticated users are blocked earlier
+      }
+    }
+    loadSession();
+  }, []);
 
   const handleAdd = async (payload: Omit<EventRow, "id" | "time_used">) => {
     setSaving(true);
@@ -877,15 +954,47 @@ export default function CalculationPage({ params }: { params: { claimId: string 
     }
   };
 
+  const submitComment = async () => {
+    setCommentError(null);
+    const text = newComment.trim();
+    if (!text) {
+      setCommentError("Comment cannot be empty");
+      return;
+    }
+    setPostingComment(true);
+    try {
+      const res = await fetch(`/api/claims/${params.claimId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: text }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to add comment");
+      if (json.comment) setComments((prev) => [...prev, json.comment]);
+      setNewComment("");
+    } catch (e: any) {
+      setCommentError(e.message || "Failed to add comment");
+    } finally {
+      setPostingComment(false);
+    }
+  };
+
   const saveClaimDetails = async () => {
     if (!claim) return;
     setSavingClaim(true);
     setError(null);
     try {
+      const payload = {
+        ...claimForm,
+        qc_reviewer_id: claimForm.qc_reviewer_id ? claimForm.qc_reviewer_id : null,
+        claim_status: claimForm.claim_status || claim?.claim_status || null,
+        // keep qc_status aligned with the single status field for consistency in API/db
+        qc_status: claimForm.claim_status || claim?.claim_status || null,
+      };
       const res = await fetch(`/api/claims/${claim.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(claimForm),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to save claim");
@@ -896,6 +1005,22 @@ export default function CalculationPage({ params }: { params: { claimId: string 
       setSavingClaim(false);
     }
   };
+
+  const currentStatus = ((claimForm.claim_status as string | undefined) || claim?.claim_status || "") as string;
+  const qcMeta = claimStatusOptions.find((o) => o.value === currentStatus);
+  const qcBadgeClass =
+    currentStatus === "completed" || currentStatus === "archived"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : currentStatus === "pending_reply" || currentStatus === "missing_information" || currentStatus === "pending_counter_check"
+      ? "bg-amber-50 text-amber-700 border-amber-200"
+      : currentStatus === "for_qc" || currentStatus === "qc_in_progress"
+      ? "bg-blue-50 text-blue-700 border-blue-200"
+      : "bg-slate-50 text-slate-700 border-slate-200";
+  const qcAssignedId = claim?.qc_reviewer_id || null;
+  const canEditQc =
+    !qcAssignedId ||
+    currentUser?.role === "super_admin" ||
+    (currentUser?.id && qcAssignedId === currentUser.id);
 
   if (loading) {
     return (
@@ -924,12 +1049,19 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-500">Claim</p>
-          <h1 className="text-3xl font-bold text-gray-900">
-            {claim.claim_reference}
-          </h1>
-          <p className="text-xs text-slate-600">
+          <div>
+            <p className="text-sm text-gray-500">Claim</p>
+            <h1 className="text-3xl font-bold text-gray-900">
+              {claim.claim_reference}
+            </h1>
+          <div className="flex items-center gap-2 mt-1">
+            {qcMeta && (
+              <span className={`text-xs px-3 py-1 rounded-full border ${qcBadgeClass}`}>
+                Status · {qcMeta.label}
+              </span>
+            )}
+          </div>
+            <p className="text-xs text-slate-600">
             Reversible: {claim.reversible ? "Yes" : "No"} {claim.reversible_scope ? `(${claim.reversible_scope.replace("_"," ")})` : ""}
             {(() => {
               const pc = claim.port_calls?.find((p) => p.id === claim.port_call_id) || claim.port_calls?.[0];
@@ -1230,6 +1362,69 @@ export default function CalculationPage({ params }: { params: { claimId: string 
         </div>
       </div>
 
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800">Quality Check</h2>
+            <p className="text-xs text-slate-500">
+              Track review status, reviewer, and notes. Only the assigned reviewer (or super admin) can change status/notes once assigned.
+            </p>
+          </div>
+          <Button onClick={saveClaimDetails} disabled={savingClaim || (!canEditQc && !!qcAssignedId)}>
+            {savingClaim ? "Saving..." : canEditQc || !qcAssignedId ? "Save QC" : "Locked"}
+          </Button>
+        </div>
+        <div className="grid md:grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <Label>Status</Label>
+            <Select
+              value={(claimForm.claim_status as any) || ""}
+              onValueChange={(v: any) => handleClaimFieldChange("claim_status", v)}
+              disabled={!canEditQc && !!qcAssignedId}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select claim status" />
+              </SelectTrigger>
+              <SelectContent>
+                {claimStatusOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Reviewer</Label>
+            <Select
+              value={(claimForm.qc_reviewer_id as any) || ""}
+              onValueChange={(v: any) => handleClaimFieldChange("qc_reviewer_id", v === "none" ? null : v)}
+              disabled={!!qcAssignedId && !canEditQc}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Assign reviewer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unassigned</SelectItem>
+                {qcUsers.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.full_name} · {u.role} · {u.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <Label>Notes</Label>
+            <Textarea
+              value={claimForm.qc_notes || ""}
+              onChange={(e) => handleClaimFieldChange("qc_notes", e.target.value)}
+              placeholder="Add QC notes or requested changes"
+              rows={3}
+              disabled={!canEditQc && !!qcAssignedId}
+            />
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-4">
         <AddEventForm
           onAdd={handleAdd}
@@ -1376,6 +1571,49 @@ export default function CalculationPage({ params }: { params: { claimId: string 
               ))}
             </div>
           )}
+        </div>
+
+        <div className="p-4 border border-slate-200 bg-white shadow-sm rounded-xl space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-700">Comments & Messaging</p>
+              <p className="text-xs text-slate-500">Coordinate on this claim with reviewers and operators.</p>
+            </div>
+            <div className="text-xs text-slate-500">{comments.length} comment{comments.length === 1 ? "" : "s"}</div>
+          </div>
+          {commentError && <p className="text-xs text-red-600">{commentError}</p>}
+          {commentsLoading ? (
+            <p className="text-sm text-slate-500">Loading comments...</p>
+          ) : comments.length === 0 ? (
+            <p className="text-sm text-slate-500">No comments yet. Start the discussion below.</p>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {comments.map((c) => (
+                <div key={c.id} className="p-2 rounded-lg border border-slate-100 bg-slate-50">
+                  <div className="flex items-center justify-between text-xs text-slate-600">
+                    <span className="font-semibold text-slate-800">{c.users?.full_name || "User"}</span>
+                    <span>{formatDate(c.created_at)}</span>
+                  </div>
+                  <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">{c.body}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label className="text-sm">Add a comment</Label>
+            <Textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              rows={3}
+              placeholder="Share updates, questions, or QC feedback..."
+            />
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-500">Comments are visible to team members on this claim.</p>
+              <Button size="sm" onClick={submitComment} disabled={postingComment}>
+                {postingComment ? "Posting..." : "Post Comment"}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -89,6 +89,8 @@ npm run dev
 - Admin: dashboards, tenant page with usage vs limits, plans editable with data tab toggles.
 - Fonts: uses Tailwind's sans stack locally (no external Google Fonts fetch) to keep builds working in restricted environments.
 - Branding/theme: unified sapphire/teal palette across core, admin, and customer-admin pages; port-call timelines with status badges; dashboard shows claims by status, upcoming port calls, and usage vs limits.
+- QC & collaboration: claims now store QC status/reviewer/notes and support claim-level comments/messaging (API + UI); migration `020_qc_and_comments` adds QC columns and `claim_comments`.
+- Future roadmap ideas (not yet implemented): deeper QC approvals/validation, external sharing/third-party review, versioning/diffs, SOF parsing + master SOF data, contract-driven auto-calcs, AI assistance, and GDPR-focused audit/retention tooling.
 
 ## Pending / Planned (summary)
 - PDF export of laytime statement (pending dependency install).

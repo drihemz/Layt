@@ -12,6 +12,9 @@ const updatableFields = [
   "load_discharge_rate_unit",
   "fixed_rate_duration_hours",
   "reversible",
+  "qc_status",
+  "qc_reviewer_id",
+  "qc_notes",
   "reversible_pool_ids",
   "demurrage_rate",
   "demurrage_currency",
@@ -43,7 +46,7 @@ export async function DELETE(
   const supabase = createServerClient();
   const { data: existing, error: fetchError } = await supabase
     .from("claims")
-    .select("id, tenant_id, voyage_id")
+    .select("id, claim_reference, tenant_id, voyage_id, qc_reviewer_id, qc_status, claim_status")
     .eq("id", params.claimId)
     .single();
 
@@ -106,6 +109,38 @@ export async function PUT(
     updatableFields.forEach((field) => {
       if (field in body) payload[field] = body[field];
     });
+
+    // Restrict QC edits when a reviewer is assigned (unless super_admin or the assigned reviewer)
+    const existingClaim: any = existing;
+    const isSuper = session.user.role === "super_admin";
+    const requesterId = session.user.id;
+    const hasReviewer = !!existingClaim.qc_reviewer_id;
+    const isReviewer = existingClaim.qc_reviewer_id === requesterId;
+
+    if (
+      (body.qc_status !== undefined || body.qc_notes !== undefined || body.claim_status !== undefined) &&
+      hasReviewer &&
+      !isSuper &&
+      !isReviewer
+    ) {
+      return NextResponse.json(
+        { error: "Only the assigned reviewer (or super admin) can update status/notes." },
+        { status: 403 }
+      );
+    }
+
+    if (
+      "qc_reviewer_id" in body &&
+      hasReviewer &&
+      body.qc_reviewer_id !== existingClaim.qc_reviewer_id &&
+      !isSuper &&
+      !isReviewer
+    ) {
+      return NextResponse.json(
+        { error: "Only the assigned reviewer or super admin can reassign QC reviewer." },
+        { status: 403 }
+      );
+    }
 
     // Handle reversible pooling persistence and symmetry within voyage
     if ("reversible_pool_ids" in body) {
@@ -182,6 +217,32 @@ export async function PUT(
 
     if (!updatedRow) {
       return NextResponse.json({ error: "Claim not updated" }, { status: 500 });
+    }
+
+    // Fire notifications for QC reviewer when assigned or status changes
+    try {
+      const newReviewer = payload.qc_reviewer_id || existingClaim.qc_reviewer_id;
+      const reviewerChanged = payload.qc_reviewer_id && payload.qc_reviewer_id !== existingClaim.qc_reviewer_id;
+      const statusChanged =
+        payload.claim_status && payload.claim_status !== existingClaim.claim_status;
+
+      if ((reviewerChanged || statusChanged) && newReviewer) {
+        const title = reviewerChanged
+          ? `Assigned to ${existingClaim.claim_reference || "claim"}`
+          : `Status updated: ${payload.claim_status}`;
+        const body = reviewerChanged
+          ? `You were assigned as QC reviewer for ${existingClaim.claim_reference || "this claim"}.`
+          : `Claim ${existingClaim.claim_reference || ""} moved to ${payload.claim_status}.`;
+        await supabase.from("notifications").insert({
+          user_id: newReviewer,
+          tenant_id: existingClaim.tenant_id,
+          title,
+          body,
+          level: reviewerChanged ? "info" : "success",
+        });
+      }
+    } catch (notifyError) {
+      console.error("Notification insert failed", notifyError);
     }
 
     return NextResponse.json({

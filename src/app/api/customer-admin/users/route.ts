@@ -141,3 +141,35 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
+
+export async function GET() {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const supabase = createServerClient();
+  const isSuper = session.user.role === "super_admin";
+
+  let query = supabase
+    .from("users")
+    .select("id, full_name, email, role, tenant_id, is_active")
+    .order("full_name", { ascending: true });
+
+  if (!isSuper) {
+    if (!session.user.tenantId) {
+      return NextResponse.json({ error: "Missing tenant context" }, { status: 400 });
+    }
+    query = query.eq("tenant_id", session.user.tenantId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("GET customer-admin/users error", error);
+    return NextResponse.json({ error: "Failed to load users" }, { status: 500 });
+  }
+
+  return NextResponse.json({ users: data || [] });
+}
