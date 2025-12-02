@@ -141,10 +141,13 @@ export function CreateVoyageDialog({ lookups, session, defaultTenantId }: Props)
     e.preventDefault();
     setError(null);
     if (!voyageReference && !voyageNumber && !externalReference) {
-      return setError("Please provide at least a voyage reference, number, or external reference.");
+      return setError("Provide at least a voyage reference, number, or external reference.");
     }
     if (isSuperAdmin && !selectedTenantId) {
-      return setError("Please select a tenant.");
+      return setError("Select a tenant for this voyage.");
+    }
+    if (!vesselId) {
+      return setError("Select a vessel.");
     }
 
     setLoading(true);

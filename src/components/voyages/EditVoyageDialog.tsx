@@ -80,6 +80,10 @@ export function EditVoyageDialog({
       setError("Voyage reference is required");
       return;
     }
+    if (!form.vessel_id) {
+      setError("Vessel is required");
+      return;
+    }
     setLoading(true);
     try {
       // Only send allowed columns

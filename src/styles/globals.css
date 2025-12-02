@@ -4,34 +4,34 @@
 
 /* Modern Maritime SaaS Theme */
 :root {
-  --background: 210 60% 98%;
-  --foreground: 222 60% 10%;
-  --primary: 200 100% 40%; /* Deep ocean blue */
+  --background: 215 44% 97%;
+  --foreground: 220 22% 12%;
+  --primary: 222 86% 45%; /* Sapphire */
   --primary-foreground: 0 0% 100%;
-  --secondary: 180 80% 45%; /* Teal wave */
+  --secondary: 15 85% 55%; /* Coral pop */
   --secondary-foreground: 0 0% 100%;
-  --accent: 195 100% 60%; /* Aqua accent */
-  --accent-foreground: 222 60% 10%;
-  --muted: 210 30% 96%;
-  --muted-foreground: 215 20% 50%;
+  --accent: 180 65% 40%; /* Teal support */
+  --accent-foreground: 0 0% 98%;
+  --muted: 215 30% 94%;
+  --muted-foreground: 215 16% 45%;
   --card: 0 0% 100%;
-  --card-foreground: 222 60% 10%;
+  --card-foreground: 220 22% 12%;
   --popover: 0 0% 100%;
-  --popover-foreground: 222 60% 10%;
-  --destructive: 0 84% 60%;
+  --popover-foreground: 220 22% 12%;
+  --destructive: 0 70% 55%;
   --destructive-foreground: 0 0% 100%;
-  --border: 210 30% 90%;
-  --input: 210 30% 90%;
-  --ring: 200 100% 50%;
+  --border: 215 30% 85%;
+  --input: 215 30% 85%;
+  --ring: 222 86% 45%;
   --radius: 0.75rem;
-  --glass: rgba(255, 255, 255, 0.7);
-  --nav-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 50%, #14b8a6 100%);
+  --glass: rgba(255, 255, 255, 0.78);
+  --nav-gradient: linear-gradient(135deg, #0f1f3f 0%, #0b3b8c 50%, #0fa3c8 100%);
   --wave-pattern: repeating-linear-gradient(
     45deg,
     transparent,
     transparent 10px,
-    rgba(59, 130, 246, 0.04) 10px,
-    rgba(59, 130, 246, 0.04) 20px
+    rgba(15, 63, 152, 0.05) 10px,
+    rgba(15, 63, 152, 0.05) 20px
   );
 }
 

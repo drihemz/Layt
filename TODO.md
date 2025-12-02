@@ -95,8 +95,11 @@ This file tracks the development progress of the Laytime Platform. It is designe
 - [x] Calculator pools totals using sibling claims in the same voyage (reversible scopes) and shows “claim not created yet” for missing ports.
 - [x] Reversible pooling selection persists per claim, syncs across pooled claims, and can be set during claim creation with scoped voyage claims.
 - [x] Build hardened for restricted environments by removing external Google Fonts dependency (local sans stack).
-- [ ] Improve non-reversible per-port balances and expose per-port breakdowns when pooling is off.
-- [ ] Refine reversible pooling math when laytime span is missing (ensure pooled allowed minus pooled deductions logic matches charter terms).
+- [x] Improve non-reversible per-port balances and expose per-port breakdowns when pooling is off.
+- [x] Refine reversible pooling math when laytime span is missing (ensure pooled allowed minus pooled deductions logic matches charter terms).
+- [x] Voyage detail/port-call pages restyled with richer port-call claims summary and upcoming legs timeline-style layout.
+- [x] Claims, voyages, dashboard aligned to new palette; claim calculator themed to match.
+- [x] Claim creation dialog validates required operation/port; voyage create/edit enforce vessel and tenant (super_admin).
 - [ ] **Voyage Enhancements**
   - [x] Added port_calls table and API (ETA/ETD, activity, status, sequence).
   - [x] Port Calls dialog to manage legs per voyage.

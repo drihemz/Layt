@@ -12,6 +12,18 @@ const config: Config = {
       colors: {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        ocean: {
+          50: "#f0f6ff",
+          100: "#dce9ff",
+          200: "#b7d2ff",
+          300: "#82afff",
+          400: "#4b8cff",
+          500: "#1f6aff",
+          600: "#0a4ed6",
+          700: "#073ba3",
+          800: "#062b7a",
+          900: "#041e59",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",

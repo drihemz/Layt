@@ -63,84 +63,108 @@ export default async function VoyageDetailPage({ params }: { params: { voyageId:
     claimsByPort[key].push(c);
   });
 
+  const orderedPorts = (voyage.port_calls || []).slice().sort((a: any, b: any) => (a.sequence || 0) - (b.sequence || 0));
+  const upcoming = orderedPorts.filter((p: any) => p.status !== "completed");
+
   return (
-    <div className="space-y-6 p-4 md:p-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-500">Voyage</p>
-          <h1 className="text-3xl font-bold text-slate-900">{voyage.voyage_reference}</h1>
-          <p className="text-sm text-slate-600">
-            Vessel: {voyage.vessels?.name || "—"} · Cargo: {voyage.cargo_names?.name || "—"} ({voyage.cargo_quantity || "—"})
-          </p>
+    <div className="space-y-6">
+      <div className="bg-white/70 backdrop-blur rounded-2xl border border-slate-200 shadow p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Voyage</p>
+          <h1 className="text-3xl font-extrabold text-slate-900">{voyage.voyage_reference}</h1>
+          <p className="text-sm text-slate-600">Vessel: {voyage.vessels?.name || "—"} · Cargo: {voyage.cargo_names?.name || "—"} ({voyage.cargo_quantity || "—"})</p>
+          <p className="text-xs text-slate-500">Owner: {voyage.owner?.name || "—"} · Charterer: {voyage.charterer?.name || "—"}</p>
         </div>
-        <Link className="text-blue-700" href="/voyages">Back to Voyages</Link>
+        <div className="flex items-center gap-2">
+          <Link className="text-sm font-semibold text-[#1f5da8]" href={`/claims?voyageId=${voyage.id}&openCreate=1`}>Create Claim</Link>
+          <Link className="text-sm font-semibold text-[#1f5da8]" href="/voyages">Back</Link>
+        </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-800">Port Calls</h2>
-          <Link className="text-blue-700 text-sm" href={`/port-calls/${voyage.port_calls?.[0]?.id || ""}`}>
-            View first port call
-          </Link>
-        </div>
-        {(!voyage.port_calls || voyage.port_calls.length === 0) ? (
-          <p className="text-sm text-slate-500">No port calls yet.</p>
-        ) : (
-          <div className="space-y-3">
-            {voyage.port_calls
-              .slice()
-              .sort((a: any, b: any) => (a.sequence || 0) - (b.sequence || 0))
-              .map((pc: any) => (
-                <div key={pc.id} className="p-3 border rounded-lg bg-slate-50">
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="md:col-span-2 bg-white rounded-2xl border border-slate-200 shadow p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">Port Calls</h2>
+            {orderedPorts.length > 0 && (
+              <Link className="text-sm font-semibold text-[#1f5da8]" href={`/port-calls/${orderedPorts[0].id}`}>Open first</Link>
+            )}
+          </div>
+          {orderedPorts.length === 0 ? (
+            <p className="text-sm text-slate-500">No port calls yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {orderedPorts.map((pc: any) => (
+                <div key={pc.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex flex-col gap-2">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {pc.sequence || ""} {pc.port_name} ({pc.activity})
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        ETA {pc.eta || "—"} · ETD {pc.etd || "—"} · {pc.status || "planned"}
-                      </p>
+                    <div className="space-y-0.5">
+                      <p className="font-semibold text-slate-900">{pc.sequence || ""} {pc.port_name} ({pc.activity})</p>
+                      <p className="text-xs text-slate-500">ETA {pc.eta || "—"} · ETD {pc.etd || "—"} · {pc.status || "planned"}</p>
+                      {pc.notes && <p className="text-xs text-slate-500">{pc.notes}</p>}
                     </div>
                     <div className="flex items-center gap-2">
-                      <Link className="text-blue-700 text-sm" href={`/port-calls/${pc.id}`}>Open</Link>
-                      <Link className="text-blue-700 text-sm" href={`/claims?voyageId=${voyage.id}&portCallId=${pc.id}&openCreate=1`}>Create Claim</Link>
+                      <Link className="text-[#1f5da8] text-sm" href={`/port-calls/${pc.id}`}>Open</Link>
+                      <Link className="text-[#1f5da8] text-sm" href={`/claims?voyageId=${voyage.id}&portCallId=${pc.id}&openCreate=1`}>Create Claim</Link>
                     </div>
                   </div>
-                  <div className="mt-2">
-                    <p className="text-xs text-slate-600">Claims</p>
-                    {claimsByPort[pc.id]?.length ? (
-                      <ul className="text-sm text-slate-800 space-y-1">
-                        {claimsByPort[pc.id].map((c) => (
-                          <li key={c.id} className="flex items-center justify-between">
-                            <span>{c.claim_reference} ({c.claim_status})</span>
-                            <Link className="text-blue-700 text-xs" href={`/claims/${c.id}/calculation`}>Open</Link>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-xs text-slate-500">No claims for this port call.</p>
-                    )}
-                  </div>
+                  <div className="text-xs text-slate-600">Claims</div>
+                  {claimsByPort[pc.id]?.length ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {claimsByPort[pc.id].map((c) => (
+                        <div key={c.id} className="flex items-center justify-between rounded-lg bg-white border border-slate-200 px-3 py-2">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{c.claim_reference}</p>
+                            <p className="text-[11px] text-slate-500">{c.claim_status}</p>
+                          </div>
+                          <Link className="text-[#1f5da8] text-xs font-semibold" href={`/claims/${c.id}/calculation`}>Open</Link>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500">No claims for this port call.</p>
+                  )}
                 </div>
               ))}
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
-        <h2 className="text-lg font-semibold text-slate-800">Claims (unassigned to port call)</h2>
-        {claimsByPort["unassigned"]?.length ? (
-          <ul className="text-sm text-slate-800 space-y-1">
-            {claimsByPort["unassigned"].map((c) => (
-              <li key={c.id} className="flex items-center justify-between">
-                <span>{c.claim_reference} ({c.claim_status})</span>
-                <Link className="text-blue-700 text-xs" href={`/claims/${c.id}/calculation`}>Open</Link>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-slate-500">No unassigned claims.</p>
-        )}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">Unassigned Claims</h2>
+            <Link className="text-xs font-semibold text-[#1f5da8]" href={`/claims?voyageId=${voyage.id}&openCreate=1`}>Create</Link>
+          </div>
+          {claimsByPort["unassigned"]?.length ? (
+            <ul className="space-y-2">
+              {claimsByPort["unassigned"].map((c) => (
+                <li key={c.id} className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{c.claim_reference}</p>
+                    <p className="text-[11px] text-slate-500">{c.claim_status}</p>
+                  </div>
+                  <Link className="text-[#1f5da8] text-xs font-semibold" href={`/claims/${c.id}/calculation`}>Open</Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-500">No unassigned claims.</p>
+          )}
+
+          <div className="pt-3 border-t border-slate-200">
+            <h3 className="text-sm font-semibold text-slate-800 mb-2">Upcoming legs</h3>
+            {upcoming.length === 0 ? (
+              <p className="text-xs text-slate-500">No upcoming legs.</p>
+            ) : (
+              <div className="space-y-2">
+                {upcoming.slice(0, 3).map((pc: any) => (
+                  <div key={pc.id} className="flex items-center justify-between text-sm bg-slate-50 rounded-lg border border-slate-200 px-3 py-2">
+                    <span className="text-slate-800">{pc.port_name}</span>
+                    <span className="text-xs text-slate-500">ETA {pc.eta || "—"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

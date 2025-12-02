@@ -97,6 +97,7 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
   const [portCallId, setPortCallId] = useState<string>("none");
   const [availableClaims, setAvailableClaims] = useState<VoyageClaim[]>([]);
   const [pooledClaimIds, setPooledClaimIds] = useState<string[]>([]);
+  const [sectionError, setSectionError] = useState<string | null>(null);
 
   const resetForm = () => {
     setClaimRef("");
@@ -320,6 +321,7 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+    setSectionError(null);
 
     if (!voyageId) {
       setError("Voyage is required.");
@@ -327,6 +329,14 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
     }
     if (isSuperAdmin && !selectedTenantId) {
       setError("Select a tenant for this claim.");
+      return;
+    }
+    if (!operationType) {
+      setSectionError("Select an operation type.");
+      return;
+    }
+    if (!portName && portCallId === "none") {
+      setSectionError("Provide a port name or choose a port call.");
       return;
     }
 
@@ -406,7 +416,11 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
             <DialogTitle>Create Claim</DialogTitle>
           </DialogHeader>
           <div className="grid gap-6 py-4 overflow-y-auto pr-2 text-base leading-relaxed">
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {(error || sectionError) && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                {error || sectionError}
+              </div>
+            )}
 
             <div className="space-y-4">
               <div className="grid grid-cols-12 gap-4 items-end">
@@ -441,12 +455,12 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
                 </div>
               </div>
 
-              <div className="grid grid-cols-12 gap-4">
-                <div className="col-span-12 md:col-span-6 space-y-1">
-                  <Label htmlFor="claimRef">Claim Reference</Label>
-                  <Input
-                    id="claimRef"
-                    value={claimRef}
+            <div className="grid grid-cols-12 gap-4">
+              <div className="col-span-12 md:col-span-6 space-y-1">
+                <Label htmlFor="claimRef">Claim Reference</Label>
+                <Input
+                  id="claimRef"
+                  value={claimRef}
                     onChange={(e) => setClaimRef(e.target.value)}
                     placeholder="Optional, auto-generated if empty"
                   />

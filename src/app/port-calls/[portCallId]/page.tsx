@@ -30,37 +30,49 @@ export default async function PortCallPage({ params }: { params: { portCallId: s
   const claims = data.claims || [];
 
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-500">Port Call</p>
-          <h1 className="text-3xl font-bold text-gray-900">{data.port_name} ({data.activity})</h1>
-          <p className="text-sm text-gray-600">Voyage: {data.voyages?.voyage_reference}</p>
-          <p className="text-xs text-gray-500">ETA {data.eta || "—"} · ETD {data.etd || "—"} · Seq {data.sequence || "—"}</p>
+    <div className="space-y-6">
+      <div className="bg-white/70 backdrop-blur rounded-2xl border border-slate-200 shadow p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Port Call</p>
+          <h1 className="text-3xl font-extrabold text-slate-900">{data.port_name} ({data.activity})</h1>
+          <p className="text-sm text-slate-600">Voyage: {data.voyages?.voyage_reference}</p>
+          <p className="text-xs text-slate-500">ETA {data.eta || "—"} · ETD {data.etd || "—"} · Seq {data.sequence || "—"}</p>
+          <p className="text-xs text-slate-500">Status: {data.status || "planned"}</p>
         </div>
         <div className="flex gap-2">
-          <Link className="text-blue-700" href={`/claims?voyageId=${data.voyage_id}&portCallId=${data.id}`}>Create Claim</Link>
-          <Link className="text-blue-700" href={`/voyages?voyageId=${data.voyage_id}`}>Back to Voyages</Link>
+          <Link className="text-sm font-semibold text-[#1f5da8]" href={`/claims?voyageId=${data.voyage_id}&portCallId=${data.id}`}>Create Claim</Link>
+          <Link className="text-sm font-semibold text-[#1f5da8]" href={`/voyages/${data.voyage_id}`}>Back to Voyage</Link>
         </div>
       </div>
 
-      <div className="border rounded-lg p-4 bg-white shadow-sm">
-        <h2 className="text-lg font-semibold mb-2">Claims for this Port Call</h2>
-        {claims.length === 0 ? (
-          <p className="text-sm text-gray-500">No claims yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {claims.map((c: any) => (
-              <li key={c.id} className="flex items-center justify-between border-b pb-2">
-                <div>
-                  <p className="font-semibold">{c.claim_reference}</p>
-                  <p className="text-xs text-gray-500">{c.claim_status}</p>
-                </div>
-                <Link className="text-blue-700 text-sm" href={`/claims/${c.id}/calculation`}>Open</Link>
-              </li>
-            ))}
-          </ul>
-        )}
+      <div className="grid md:grid-cols-3 gap-4">
+        <div className="md:col-span-2 border rounded-2xl p-5 bg-white shadow space-y-3 border-slate-200">
+          <h2 className="text-lg font-semibold text-slate-900">Claims for this Port Call</h2>
+          {claims.length === 0 ? (
+            <p className="text-sm text-slate-500">No claims yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {claims.map((c: any) => (
+                <li key={c.id} className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+                  <div>
+                    <p className="font-semibold text-slate-900">{c.claim_reference}</p>
+                    <p className="text-xs text-slate-500">{c.claim_status}</p>
+                  </div>
+                  <Link className="text-[#1f5da8] text-sm font-semibold" href={`/claims/${c.id}/calculation`}>Open</Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="border rounded-2xl p-5 bg-white shadow border-slate-200 space-y-3">
+          <h3 className="text-sm font-semibold text-slate-800">Details</h3>
+          <div className="text-sm text-slate-600 space-y-1">
+            <p><span className="font-semibold text-slate-800">ETA:</span> {data.eta || "—"}</p>
+            <p><span className="font-semibold text-slate-800">ETD:</span> {data.etd || "—"}</p>
+            <p><span className="font-semibold text-slate-800">Allowed Hours:</span> {data.allowed_hours ?? "—"}</p>
+            <p><span className="font-semibold text-slate-800">Notes:</span> {data.notes || "—"}</p>
+          </div>
+        </div>
       </div>
     </div>
   );

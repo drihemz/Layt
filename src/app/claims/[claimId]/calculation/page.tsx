@@ -308,6 +308,7 @@ function Summary({
   const hasInitializedPool = useRef(false);
   const lastSavedIds = useRef<string[]>([]);
   const [poolDirty, setPoolDirty] = useState(false);
+  const [activeTab, setActiveTab] = useState<"summary" | "breakdown">("summary");
 
   const idsEqual = (a: string[], b: string[]) => {
     if (a.length !== b.length) return false;
@@ -347,6 +348,18 @@ function Summary({
     const key = ev.port_call_id || "unassigned";
     deductionsByPort[key] = (deductionsByPort[key] || 0) + (ev.time_used || 0);
   });
+  const totalDeductionsAll = Object.values(deductionsByPort).reduce((a, b) => a + (b || 0), 0);
+
+  const baseSpanHours = (() => {
+    if (claim.laytime_start && claim.laytime_end) {
+      const start = new Date(claim.laytime_start).getTime();
+      const end = new Date(claim.laytime_end).getTime();
+      if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
+        return (end - start) / 3600000;
+      }
+    }
+    return 0;
+  })();
 
   // Siblings in scope (by activity), regardless of port_call_id presence
   const scopedSiblings = (siblings || []).filter((s) => scopeAllows(s.activity));
@@ -462,23 +475,23 @@ function Summary({
     return (cargoQty / (claim.load_discharge_rate || 1)) * 24;
   })();
 
+  const primaryPort = claim.port_call_id
+    ? allPorts.find((p) => p.id === claim.port_call_id)
+    : allPorts[0];
+
   const totalAllowed = claim.reversible
     ? (effectiveSiblings.length > 0
         ? Math.max(effectiveSiblings.reduce((acc, s) => acc + (s.allowed || 0), 0), 0)
         : fallbackAllowed)
+    : primaryPort && primaryPort.allowed_hours !== null && primaryPort.allowed_hours !== undefined
+    ? Number(primaryPort.allowed_hours)
     : fallbackAllowed;
 
   const fallbackUsed = (() => {
-    if (claim.laytime_start && claim.laytime_end) {
-      const start = new Date(claim.laytime_start).getTime();
-      const end = new Date(claim.laytime_end).getTime();
-      if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
-        const baseSpan = (end - start) / 3600000;
-        const totalDeductions = Object.values(deductionsByPort).reduce((a, b) => a + (b || 0), 0);
-        return Math.max(baseSpan - totalDeductions, 0);
-      }
+    if (baseSpanHours > 0) {
+      return Math.max(baseSpanHours - totalDeductionsAll, 0);
     }
-    return 0;
+    return totalDeductionsAll;
   })();
 
   const totalUsed = claim.reversible
@@ -500,65 +513,92 @@ function Summary({
   const despatch =
     timeOver !== null && timeOver > 0 ? timeOver * (despatchRate / 24) : 0;
 
-  // Build per-port breakdown (including unassigned) — only scoped ports
-  const breakdown = claim.reversible
-    ? (() => {
-        const ordered = [...scopedPorts].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
-        const rows = ordered.map((pc) => {
-          const sibling =
-            effectiveSiblings.find((s) => s.claim_id === claim.id && s.port_call_id === pc.id) ||
-            effectiveSiblings.find((s) => s.port_call_id === pc.id) ||
-            effectiveSiblings.find((s) => !s.port_call_id && (!s.activity || s.activity === pc.activity));
-          if (!sibling) {
-            return {
-              id: pc.id,
-              label: pc.port_name || "Port",
-              activity: pc.activity || "",
-              allowed: null,
-              base: 0,
-              deductions: 0,
-              used: 0,
-              inScope: true,
-              overUnder: null,
-              note: "Claim not created yet",
-            };
-          }
-          const overUnder =
-            sibling.allowed !== null && sibling.allowed !== undefined
-              ? (sibling.allowed || 0) - (sibling.used || 0)
-              : null;
+  // Build per-port breakdown (including unassigned)
+  const breakdown = (() => {
+    const ordered = (claim.reversible ? scopedPorts : allPorts)
+      .slice()
+      .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
 
+    const rows = ordered.map((pc) => {
+      if (claim.reversible) {
+        const sibling =
+          effectiveSiblings.find((s) => s.claim_id === claim.id && s.port_call_id === pc.id) ||
+          effectiveSiblings.find((s) => s.port_call_id === pc.id) ||
+          effectiveSiblings.find((s) => !s.port_call_id && (!s.activity || s.activity === pc.activity));
+        if (!sibling) {
           return {
             id: pc.id,
             label: pc.port_name || "Port",
             activity: pc.activity || "",
-            allowed: sibling.allowed,
-            base: sibling.base_hours,
-            deductions: sibling.deductions,
-            used: sibling.used,
-            inScope: true,
-            overUnder,
-            note: undefined,
-          };
-        });
-
-        if (deductionsByPort["unassigned"]) {
-          rows.push({
-            id: "unassigned",
-            label: "Unassigned events",
-            activity: "",
             allowed: null,
             base: 0,
-            deductions: deductionsByPort["unassigned"],
+            deductions: 0,
             used: 0,
             inScope: true,
             overUnder: null,
-            note: undefined,
-          });
+            note: "Claim not created yet",
+          };
         }
-        return rows;
-      })()
-    : [];
+        const overUnder =
+          sibling.allowed !== null && sibling.allowed !== undefined
+            ? (sibling.allowed || 0) - (sibling.used || 0)
+            : null;
+
+        return {
+          id: pc.id,
+          label: pc.port_name || "Port",
+          activity: pc.activity || "",
+          allowed: sibling.allowed,
+          base: sibling.base_hours,
+          deductions: sibling.deductions,
+          used: sibling.used,
+          inScope: true,
+          overUnder,
+          note: undefined,
+        };
+      }
+
+      const portAllowed =
+        pc.allowed_hours !== null && pc.allowed_hours !== undefined
+          ? Number(pc.allowed_hours)
+          : pc.id === claim.port_call_id
+          ? totalAllowed
+          : null;
+      const base = pc.id === claim.port_call_id ? baseSpanHours : 0;
+      const deductions = deductionsByPort[pc.id] || 0;
+      const used = base > 0 ? Math.max(base - deductions, 0) : deductions;
+      const overUnder = portAllowed !== null ? (portAllowed || 0) - (used || 0) : null;
+
+      return {
+        id: pc.id,
+        label: pc.port_name || "Port",
+        activity: pc.activity || "",
+        allowed: portAllowed,
+        base,
+        deductions,
+        used,
+        inScope: true,
+        overUnder,
+        note: undefined,
+      };
+    });
+
+    if (deductionsByPort["unassigned"]) {
+      rows.push({
+        id: "unassigned",
+        label: "Unassigned events",
+        activity: "",
+        allowed: null,
+        base: 0,
+        deductions: deductionsByPort["unassigned"],
+        used: deductionsByPort["unassigned"],
+        inScope: true,
+        overUnder: null,
+        note: undefined,
+      });
+    }
+    return rows;
+  })();
 
   return (
     <div className="space-y-4">
@@ -588,35 +628,35 @@ function Summary({
       )}
 
       <div className="grid md:grid-cols-4 gap-4">
-        <div className="p-4 bg-gradient-to-br from-blue-50 to-white border border-blue-100 rounded-xl shadow-sm">
-          <p className="text-sm text-blue-700 font-semibold">Allowed Time</p>
-          <p className="text-3xl font-bold text-blue-900">
+        <div className="p-4 bg-gradient-to-br from-[#123b7a0d] via-white to-white border border-[#123b7a1f] rounded-xl shadow-sm">
+          <p className="text-sm text-[#123b7a] font-semibold">Allowed Time</p>
+          <p className="text-3xl font-bold text-[#0b1c3a]">
             {totalAllowed !== null ? formatHours(totalAllowed, timeFormat) : "—"}
           </p>
         </div>
-        <div className="p-4 bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-xl shadow-sm">
-          <p className="text-sm text-indigo-700 font-semibold">Used (Laytime - Deductions)</p>
-          <p className="text-3xl font-bold text-indigo-900">
+        <div className="p-4 bg-gradient-to-br from-[#0f6d8214] via-white to-white border border-[#0f6d821f] rounded-xl shadow-sm">
+          <p className="text-sm text-[#0f6d82] font-semibold">Used (Laytime - Deductions)</p>
+          <p className="text-3xl font-bold text-[#0f2d63]">
             {formatHours(totalUsed, timeFormat)}
           </p>
         </div>
-        <div className="p-4 bg-gradient-to-br from-amber-50 to-white border border-amber-100 rounded-xl shadow-sm">
-          <p className="text-sm text-amber-700 font-semibold">Over / Under</p>
+        <div className="p-4 bg-gradient-to-br from-[#b45c1d14] via-white to-white border border-[#d8742b33] rounded-xl shadow-sm">
+          <p className="text-sm text-[#b45c1d] font-semibold">Over / Under</p>
           <p
             className={`text-3xl font-bold ${
               timeOver !== null
                 ? timeOver >= 0
-                  ? "text-emerald-700"
-                  : "text-red-700"
+                  ? "text-[#17694c]"
+                  : "text-[#c13232]"
                 : "text-slate-800"
             }`}
           >
             {timeOver !== null ? formatHours(timeOver, timeFormat) : "—"}
           </p>
         </div>
-        <div className="p-4 bg-gradient-to-br from-emerald-50 to-white border border-emerald-100 rounded-xl shadow-sm">
-          <p className="text-sm text-emerald-700 font-semibold">Result</p>
-          <p className="text-lg font-semibold text-emerald-900">
+        <div className="p-4 bg-gradient-to-br from-[#17694c14] via-white to-white border border-[#1a8c642b] rounded-xl shadow-sm">
+          <p className="text-sm text-[#17694c] font-semibold">Result</p>
+          <p className="text-lg font-semibold text-[#0b1c3a]">
             {timeOver === null
               ? "—"
               : timeOver > 0
@@ -628,10 +668,10 @@ function Summary({
         </div>
       </div>
 
-      {claim.reversible && breakdown.length > 0 && (
+      {breakdown.length > 0 && (
         <div className="p-4 border border-slate-200 rounded-xl bg-white">
           <p className="text-sm font-semibold text-slate-700 mb-3">
-            Per-port breakdown (scope-aware)
+            Per-port breakdown {claim.reversible ? "(scope-aware)" : "(per port call)"}
           </p>
           <div className="grid md:grid-cols-3 gap-3">
             {breakdown.map((b) => {
@@ -645,7 +685,7 @@ function Summary({
                   <p className="text-sm text-slate-600">Base (laytime span): {formatHours(b.base || 0, timeFormat)}</p>
                   <p className="text-sm text-slate-600">Deductions: {formatHours(b.deductions || 0, timeFormat)}</p>
                   <p className="text-sm text-slate-600">Used: {formatHours(b.used || 0, timeFormat)}</p>
-                  <p className={`text-sm font-semibold ${over !== null ? (over >= 0 ? "text-emerald-700" : "text-red-700") : "text-slate-600"}`}>
+                  <p className={`text-sm font-semibold ${over !== null ? (over >= 0 ? "text-[#17694c]" : "text-[#c13232]") : "text-slate-600"}`}>
                     Over/Under: {over !== null ? formatHours(over, timeFormat) : "—"}
                   </p>
                 </div>

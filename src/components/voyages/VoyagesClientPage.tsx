@@ -111,11 +111,11 @@ export default function VoyagesClientPage({ voyages, lookups, tenantIdFilter, pa
   };
 
   return (
-    <div className="space-y-8 p-4 md:p-8">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-4xl font-extrabold text-ocean-800 tracking-tight">Voyages</h1>
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-ocean-100 text-ocean-700">{voyages.length}</span>
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 bg-white/60 backdrop-blur rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Voyages</h1>
+          <p className="text-sm text-slate-500">Manage voyage legs, port calls, and linked claims.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
           {session.user.role === 'super_admin' && (
@@ -126,26 +126,26 @@ export default function VoyagesClientPage({ voyages, lookups, tenantIdFilter, pa
               placeholder="Search by reference..."
               value={searchTerm}
               onChange={handleSearch}
-              className="pl-10 pr-4 py-2 rounded-xl border-2 border-ocean-200 focus:border-ocean-400 bg-white shadow-sm"
+              className="pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:border-[#1f5da8] bg-white shadow-sm"
             />
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-ocean-400" />
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
           </div>
           <CreateVoyageDialog lookups={lookups} session={session} defaultTenantId={tenantIdFilter} />
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-xl border-2 border-ocean-100 overflow-x-auto">
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-x-auto">
         <Table>
-          <TableHeader className="sticky top-0 z-10 bg-ocean-50/80 backdrop-blur">
+          <TableHeader className="sticky top-0 z-10 bg-slate-50/80 backdrop-blur">
             <TableRow>
-              <TableHead className="text-ocean-700 font-bold">Reference</TableHead>
-              <TableHead className="text-ocean-700 font-bold">Vessel</TableHead>
-              <TableHead className="text-ocean-700 font-bold">Owner</TableHead>
-              <TableHead className="text-ocean-700 font-bold">Charterer</TableHead>
-              <TableHead className="text-ocean-700 font-bold">Cargo</TableHead>
-              <TableHead className="text-ocean-700 font-bold">Voyage #</TableHead>
-              <TableHead className="text-ocean-700 font-bold">Ports</TableHead>
-              <TableHead className="text-ocean-700 font-bold text-right">Actions</TableHead>
+              <TableHead className="text-slate-700 font-bold">Reference</TableHead>
+              <TableHead className="text-slate-700 font-bold">Vessel</TableHead>
+              <TableHead className="text-slate-700 font-bold">Owner</TableHead>
+              <TableHead className="text-slate-700 font-bold">Charterer</TableHead>
+              <TableHead className="text-slate-700 font-bold">Cargo</TableHead>
+              <TableHead className="text-slate-700 font-bold">Voyage #</TableHead>
+              <TableHead className="text-slate-700 font-bold">Ports</TableHead>
+              <TableHead className="text-slate-700 font-bold text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

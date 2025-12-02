@@ -209,7 +209,7 @@ export async function GET(
           hoursBetween(ev.from_datetime, ev.to_datetime, ev.rate_of_calculation || 100);
         return sum + (t || 0);
       }, 0);
-      const used = base > 0 ? Math.max(base - deductions, 0) : base;
+      const used = base > 0 ? Math.max(base - deductions, 0) : deductions;
       return {
         claim_id: c.id,
         claim_reference: c.claim_reference,
