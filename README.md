@@ -87,6 +87,7 @@ npm run dev
 - Data Management: tenant/public lookups, plan-based tab gating, request-new flow.
 - Plans/Billing: plan limits (voyages/claims/month/seats), tenant plan assignment, invoices list/mark paid, usage/limits displayed, seat enforcement on user creation, data tab toggles.
 - Admin: dashboards, tenant page with usage vs limits, plans editable with data tab toggles.
+- Fonts: uses Tailwind's sans stack locally (no external Google Fonts fetch) to keep builds working in restricted environments.
 
 ## Pending / Planned (summary)
 - PDF export of laytime statement (pending dependency install).

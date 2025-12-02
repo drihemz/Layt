@@ -94,6 +94,7 @@ This file tracks the development progress of the Laytime Platform. It is designe
 - [x] Added scope-aware per-port breakdown cards in the calculator (allowed/used/over-under) alongside pooled totals.
 - [x] Calculator pools totals using sibling claims in the same voyage (reversible scopes) and shows “claim not created yet” for missing ports.
 - [x] Reversible pooling selection persists per claim, syncs across pooled claims, and can be set during claim creation with scoped voyage claims.
+- [x] Build hardened for restricted environments by removing external Google Fonts dependency (local sans stack).
 - [ ] Improve non-reversible per-port balances and expose per-port breakdowns when pooling is off.
 - [ ] Refine reversible pooling math when laytime span is missing (ensure pooled allowed minus pooled deductions logic matches charter terms).
 - [ ] **Voyage Enhancements**

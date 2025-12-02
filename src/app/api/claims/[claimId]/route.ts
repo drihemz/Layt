@@ -137,9 +137,10 @@ export async function PUT(
       }
 
       // Remove current claim from pools it no longer belongs to within this voyage
+      const poolList = pooledArray || [];
       const stale = (voyageClaims || []).filter(
         (c) =>
-          !pooledArray.includes(c.id) &&
+          !poolList.includes(c.id) &&
           Array.isArray(c.reversible_pool_ids) &&
           c.reversible_pool_ids.includes(existing.id)
       );

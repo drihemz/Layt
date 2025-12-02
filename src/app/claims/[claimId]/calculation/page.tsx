@@ -314,8 +314,9 @@ function Summary({
     const setA = new Set(a);
     const setB = new Set(b);
     if (setA.size !== setB.size) return false;
-    for (const id of setA) {
-      if (!setB.has(id)) return false;
+    const values = Array.from(setA);
+    for (let i = 0; i < values.length; i += 1) {
+      if (!setB.has(values[i])) return false;
     }
     return true;
   };
@@ -546,10 +547,13 @@ function Summary({
             id: "unassigned",
             label: "Unassigned events",
             activity: "",
-            allowed: 0,
+            allowed: null,
             base: 0,
             deductions: deductionsByPort["unassigned"],
             used: 0,
+            inScope: true,
+            overUnder: null,
+            note: undefined,
           });
         }
         return rows;
