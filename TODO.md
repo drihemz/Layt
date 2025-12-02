@@ -100,6 +100,10 @@ This file tracks the development progress of the Laytime Platform. It is designe
 - [x] Voyage detail/port-call pages restyled with richer port-call claims summary and upcoming legs timeline-style layout.
 - [x] Claims, voyages, dashboard aligned to new palette; claim calculator themed to match.
 - [x] Claim creation dialog validates required operation/port; voyage create/edit enforce vessel and tenant (super_admin).
+- [x] Admin and customer-admin pages rethemed to light palette; tenants/users tables restyled for readability.
+- [x] Port-call timeline component with icons/status badges added to voyage and port-call pages.
+- [x] Dashboard includes claims-by-status and upcoming port-call widgets.
+- [x] Claim create form sections regrouped with helper text and validation hints; cargo quantity > 0 enforced on voyage create/edit.
 - [ ] **Voyage Enhancements**
   - [x] Added port_calls table and API (ETA/ETD, activity, status, sequence).
   - [x] Port Calls dialog to manage legs per voyage.

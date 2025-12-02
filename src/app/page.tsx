@@ -1,11 +1,13 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
+import { getTenantPlanUsage } from "@/lib/tenant-plan";
 import DashboardClient from "@/components/dashboard/DashboardClient";
 import { redirect } from "next/navigation";
 
 async function getStats(tenantId: string) {
   const supabase = createServerClient();
+  const usage = await getTenantPlanUsage(tenantId).catch(() => null);
 
   const [
     voyagesCount,
@@ -14,6 +16,8 @@ async function getStats(tenantId: string) {
     claimsData,
     recentVoyages,
     recentClaims,
+    statusClaims,
+    upcomingPortCalls,
   ] = await Promise.all([
     supabase
       .from("voyages")
@@ -44,6 +48,16 @@ async function getStats(tenantId: string) {
       .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false })
       .limit(5),
+    supabase
+      .from("claims")
+      .select("claim_status")
+      .eq("tenant_id", tenantId),
+    supabase
+      .from("port_calls")
+      .select("id, port_name, activity, eta, status, voyages(voyage_reference)")
+      .eq("tenant_id", tenantId)
+      .order("eta", { ascending: true })
+      .limit(5),
   ]);
 
   const totalAmount = claimsData.data?.reduce(
@@ -58,6 +72,13 @@ async function getStats(tenantId: string) {
     totalAmount,
     recentVoyages: recentVoyages.data || [],
     recentClaims: recentClaims.data || [],
+    claimsByStatus: (statusClaims.data || []).reduce((acc: Record<string, number>, c: any) => {
+      const key = c.claim_status || "unknown";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {}),
+    upcomingPortCalls: upcomingPortCalls.data || [],
+    usage,
   };
 }
 

@@ -98,6 +98,7 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
   const [availableClaims, setAvailableClaims] = useState<VoyageClaim[]>([]);
   const [pooledClaimIds, setPooledClaimIds] = useState<string[]>([]);
   const [sectionError, setSectionError] = useState<string | null>(null);
+  const [showValidationHint, setShowValidationHint] = useState(false);
 
   const resetForm = () => {
     setClaimRef("");
@@ -325,20 +326,25 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
 
     if (!voyageId) {
       setError("Voyage is required.");
+      setShowValidationHint(true);
       return;
     }
     if (isSuperAdmin && !selectedTenantId) {
       setError("Select a tenant for this claim.");
+      setShowValidationHint(true);
       return;
     }
     if (!operationType) {
       setSectionError("Select an operation type.");
+      setShowValidationHint(true);
       return;
     }
     if (!portName && portCallId === "none") {
       setSectionError("Provide a port name or choose a port call.");
+      setShowValidationHint(true);
       return;
     }
+    setShowValidationHint(false);
 
     setLoading(true);
     try {
@@ -423,160 +429,174 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
             )}
 
             <div className="space-y-4">
-              <div className="grid grid-cols-12 gap-4 items-end">
-                {isSuperAdmin && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <p className="text-sm font-semibold text-slate-800">Context</p>
+                <div className="grid grid-cols-12 gap-4 items-end">
+                  {isSuperAdmin && (
+                    <div className="col-span-12 md:col-span-6 space-y-1">
+                      <Label htmlFor="tenant">Tenant</Label>
+                      <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
+                        <SelectTrigger id="tenant">
+                          <SelectValue placeholder="Select tenant" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {tenants.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   <div className="col-span-12 md:col-span-6 space-y-1">
-                    <Label htmlFor="tenant">Tenant</Label>
-                    <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
-                      <SelectTrigger id="tenant">
-                        <SelectValue placeholder="Select tenant" />
+                    <Label htmlFor="voyage">Voyage</Label>
+                    <Select value={voyageId} onValueChange={setVoyageId} disabled={superAdminDisabled}>
+                      <SelectTrigger id="voyage">
+                        <SelectValue placeholder="Select a voyage" />
                       </SelectTrigger>
                       <SelectContent>
-                        {tenants.map((t) => (
-                          <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                        {visibleVoyages.map((v) => (
+                          <SelectItem key={v.id} value={v.id}>{v.voyage_reference}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {showValidationHint && !voyageId && <p className="text-xs text-red-600">Voyage is required.</p>}
+                  </div>
+                </div>
+
+                {selectedVoyage && (
+                  <div className="w-full border rounded-xl p-3 bg-white text-slate-900 space-y-1">
+                    <p className="font-semibold">Voyage: <span className="font-normal">{selectedVoyage.voyage_reference}</span></p>
+                    <p className="font-semibold">Cargo: <span className="font-normal">{selectedVoyage.cargo_names?.name || "—"} ({selectedVoyage.cargo_quantity || "—"})</span></p>
+                    <p className="font-semibold">Charter Party: <span className="font-normal">{selectedVoyage.charter_parties?.name || "—"}</span></p>
+                    <p className="text-sm text-slate-600">Allowed time preview: <span className="font-semibold">{previewAllowed}</span></p>
                   </div>
                 )}
+              </div>
 
-              <div className="col-span-12 md:col-span-6 space-y-1">
-                <Label htmlFor="voyage">Voyage</Label>
-                <Select value={voyageId} onValueChange={setVoyageId} disabled={superAdminDisabled}>
-                  <SelectTrigger id="voyage">
-                    <SelectValue placeholder="Select a voyage" />
-                  </SelectTrigger>
-                    <SelectContent>
-                      {visibleVoyages.map((v) => (
-                        <SelectItem key={v.id} value={v.id}>{v.voyage_reference}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <p className="text-sm font-semibold text-slate-800">Meta</p>
+                <div className="grid grid-cols-12 gap-4">
+                  <div className="col-span-12 md:col-span-6 space-y-1">
+                    <Label htmlFor="claimRef">Claim Reference</Label>
+                    <Input
+                      id="claimRef"
+                      value={claimRef}
+                      onChange={(e) => setClaimRef(e.target.value)}
+                      placeholder="Optional, auto-generated if empty"
+                    />
+                  </div>
+
+                  <div className="col-span-12 md:col-span-6 space-y-1">
+                    <Label>Status</Label>
+                    <Select value={status} onValueChange={setStatus}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="in_progress">In Progress</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="archived">Archived</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
-            <div className="grid grid-cols-12 gap-4">
-              <div className="col-span-12 md:col-span-6 space-y-1">
-                <Label htmlFor="claimRef">Claim Reference</Label>
-                <Input
-                  id="claimRef"
-                  value={claimRef}
-                    onChange={(e) => setClaimRef(e.target.value)}
-                    placeholder="Optional, auto-generated if empty"
-                  />
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-slate-800">Operations & Ports</p>
+                  <p className="text-xs text-slate-500">Required: operation + port</p>
                 </div>
+                <div className="grid grid-cols-12 gap-4">
+                  <div className="col-span-12 md:col-span-4 space-y-1">
+                    <Label>Operation</Label>
+                    <Select value={operationType} onValueChange={(v: any) => setOperationType(v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Load or Discharge" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="load">Load</SelectItem>
+                        <SelectItem value="discharge">Discharge</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {showValidationHint && !operationType && <p className="text-xs text-red-600">Operation is required.</p>}
+                  </div>
 
-                <div className="col-span-12 md:col-span-6 space-y-1">
-                  <Label>Status</Label>
-                  <Select value={status} onValueChange={setStatus}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="archived">Archived</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-          {selectedVoyage && (
-            <div className="w-full border rounded-xl p-3 bg-slate-50 text-slate-900 space-y-1">
-              <p className="font-semibold">Voyage: <span className="font-normal">{selectedVoyage.voyage_reference}</span></p>
-              <p className="font-semibold">Cargo: <span className="font-normal">{selectedVoyage.cargo_names?.name || "—"} ({selectedVoyage.cargo_quantity || "—"})</span></p>
-              <p className="font-semibold">Charter Party: <span className="font-normal">{selectedVoyage.charter_parties?.name || "—"}</span></p>
-              <p className="text-sm text-slate-600">Allowed time preview: <span className="font-semibold">{previewAllowed}</span></p>
-            </div>
-          )}
-            </div>
-
-            <div className="grid grid-cols-12 gap-4">
-              <div className="col-span-12 md:col-span-4 space-y-1">
-                <Label>Operation</Label>
-                <Select value={operationType} onValueChange={(v: any) => setOperationType(v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Load or Discharge" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="load">Load</SelectItem>
-                    <SelectItem value="discharge">Discharge</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {portCalls.length > 0 && (
-                <div className="col-span-12 md:col-span-6 space-y-1">
-                  <Label>Port Call</Label>
-          <Select value={portCallId} onValueChange={(v) => setPortCallId(v)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select a port call" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {portCalls.map((pc) => (
-                <SelectItem key={pc.id} value={pc.id}>
-                  {pc.port_name} · {pc.activity || "other"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-              <div className="col-span-12 md:col-span-4 space-y-1 relative">
-                <Label htmlFor="port">Port</Label>
-                <Input
-                  id="port"
-                  value={portText}
-                  onChange={(e) => {
-                    setPortText(e.target.value);
-                    setPortName(e.target.value);
-                  }}
-                  onFocus={() => setActiveField("port")}
-                  onBlur={() => setTimeout(() => setActiveField(""), 150)}
-                  placeholder="Type or select port"
-                />
-                {activeField === "port" && (
-                  <div className="absolute z-30 mt-1 w-full bg-white border rounded shadow-sm text-sm text-gray-700 max-h-40 overflow-auto">
-                    {ports
-                      .filter((p) => !portText || p.name.toLowerCase().includes(portText.toLowerCase()))
-                      .slice(0, 6)
-                      .map((p) => (
+                  {portCalls.length > 0 && (
+                    <div className="col-span-12 md:col-span-6 space-y-1">
+                      <Label>Port Call</Label>
+                      <Select value={portCallId} onValueChange={(v) => setPortCallId(v)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a port call" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {portCalls.map((pc) => (
+                            <SelectItem key={pc.id} value={pc.id}>
+                              {pc.port_name} · {pc.activity || "other"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <div className="col-span-12 md:col-span-4 space-y-1 relative">
+                    <Label htmlFor="port">Port</Label>
+                    <Input
+                      id="port"
+                      value={portText}
+                      onChange={(e) => {
+                        setPortText(e.target.value);
+                        setPortName(e.target.value);
+                      }}
+                      onFocus={() => setActiveField("port")}
+                      onBlur={() => setTimeout(() => setActiveField(""), 150)}
+                      placeholder="Type or select port"
+                    />
+                    {activeField === "port" && (
+                      <div className="absolute z-30 mt-1 w-full bg-white border rounded shadow-sm text-sm text-gray-700 max-h-40 overflow-auto">
+                        {ports
+                          .filter((p) => !portText || p.name.toLowerCase().includes(portText.toLowerCase()))
+                          .slice(0, 6)
+                          .map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className="w-full text-left px-2 py-1 hover:bg-slate-100"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setPortText(p.name);
+                                setPortName(p.name);
+                              }}
+                            >
+                              {p.name}
+                            </button>
+                          ))}
                         <button
-                          key={p.id}
                           type="button"
-                          className="w-full text-left px-2 py-1 hover:bg-slate-100"
+                          className="w-full text-left px-2 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                           onMouseDown={(e) => {
                             e.preventDefault();
-                            setPortText(p.name);
-                            setPortName(p.name);
+                            requestNew(portText || "New port");
                           }}
                         >
-                          {p.name}
+                          Request “{portText || "new port"}”
                         </button>
-                      ))}
-                    <button
-                      type="button"
-                      className="w-full text-left px-2 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        requestNew(portText || "New port");
-                      }}
-                    >
-                      Request “{portText || "new port"}”
-                    </button>
+                      </div>
+                    )}
+                    {showValidationHint && !portName && portCallId === "none" && <p className="text-xs text-red-600">Port is required.</p>}
                   </div>
-                )}
+                  <div className="col-span-12 md:col-span-4 space-y-1">
+                    <Label htmlFor="country">Country</Label>
+                    <Input id="country" value={country} onChange={(e) => setCountry(e.target.value)} />
+                  </div>
+                </div>
               </div>
-              <div className="col-span-12 md:col-span-4 space-y-1">
-                <Label htmlFor="country">Country</Label>
-                <Input id="country" value={country} onChange={(e) => setCountry(e.target.value)} />
-              </div>
-            </div>
 
-            <div className="space-y-4 border rounded-xl p-4 bg-slate-50">
-              <p className="text-sm font-semibold text-slate-700">Rates & Reversibility</p>
+              <div className="space-y-4 border rounded-xl p-4 bg-slate-50">
+                <p className="text-sm font-semibold text-slate-700">Rates & Reversibility</p>
             <div className="grid grid-cols-12 gap-4 items-end">
               <div className="col-span-12 md:col-span-6 space-y-1">
                 <Label>Load/Discharge Rate</Label>
@@ -777,11 +797,11 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
               </div>
             </div>
 
-            <div className="space-y-4 border rounded-xl p-4 bg-slate-50">
-              <p className="text-sm font-semibold text-slate-700">Key Dates & Times</p>
-              <div className="grid grid-cols-12 gap-4">
-                <div className="col-span-12 md:col-span-6 space-y-1">
-                  <Label>Laycan Start</Label>
+              <div className="space-y-4 border rounded-xl p-4 bg-slate-50">
+                <p className="text-sm font-semibold text-slate-700">Key Dates & Times</p>
+                <div className="grid grid-cols-12 gap-4">
+                  <div className="col-span-12 md:col-span-6 space-y-1">
+                    <Label>Laycan Start</Label>
                   <Input type="datetime-local" value={laycanStart} onChange={(e) => setLaycanStart(e.target.value)} />
                 </div>
                 <div className="col-span-12 md:col-span-6 space-y-1">
@@ -818,6 +838,7 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
                     onChange={(e) => setTurnTimeMethod(e.target.value)}
                     placeholder="Free text"
                   />
+                </div>
                 </div>
               </div>
             </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { Ship, FileText, DollarSign, TrendingUp, Anchor, Navigation, BarChart3, Activity, Clock, Map, Compass } from "lucide-react";
+import { Ship, FileText, DollarSign, TrendingUp, Anchor, Navigation, BarChart3, Activity, Clock, Map, Compass, AlertTriangle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { Session } from "next-auth";
 
@@ -12,6 +12,23 @@ interface Stats {
   totalAmount: number;
   recentVoyages: any[];
   recentClaims: any[];
+  claimsByStatus?: Record<string, number>;
+  upcomingPortCalls?: any[];
+  usage?: {
+    plan_name?: string | null;
+    max_voyages?: number | null;
+    max_claims?: number | null;
+    max_claims_per_month?: number | null;
+    seats_admins?: number | null;
+    seats_operators?: number | null;
+    usage?: {
+      admins: number;
+      operators: number;
+      voyages: number;
+      claims: number;
+      claims_month: number;
+    };
+  } | null;
 }
 
 interface DashboardClientProps {
@@ -70,6 +87,12 @@ export default function DashboardClient({ initialStats, session }: DashboardClie
       description: "Total value",
     },
   ];
+
+  const statusEntries = initialStats.claimsByStatus
+    ? Object.entries(initialStats.claimsByStatus)
+    : [];
+  const upcoming = initialStats.upcomingPortCalls || [];
+  const usage = initialStats.usage;
 
   return (
     <div className="space-y-10">
@@ -177,9 +200,9 @@ export default function DashboardClient({ initialStats, session }: DashboardClie
       </div>
 
       {/* Recent Activity */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Recent Voyages */}
-        <div className="p-6 rounded-2xl shadow-lg bg-white border border-slate-200">
+        <div className="p-6 rounded-2xl shadow-lg bg-white border border-slate-200 lg:col-span-2">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-2">
               <Ship className="w-6 h-6 text-[#1f5da8]" />
@@ -294,6 +317,87 @@ export default function DashboardClient({ initialStats, session }: DashboardClie
               ))
             )}
           </div>
+        </div>
+
+        {/* Claims by Status / Upcoming / Usage */}
+        <div className="space-y-4 lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-[#0f6d82]" />
+                <h3 className="text-sm font-semibold text-slate-900">Claims by Status</h3>
+              </div>
+              <span className="text-xs text-slate-500">Live</span>
+            </div>
+            {statusEntries.length === 0 ? (
+              <p className="text-sm text-slate-500">No claims yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {statusEntries.map(([status, count]) => (
+                  <div key={status} className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+                    <span className="text-sm font-semibold text-slate-800 capitalize">{status.replace("_", " ")}</span>
+                    <span className="text-sm font-bold text-[#1f5da8]">{count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 rounded-2xl border border-slate-200 bg-white shadow-sm md:col-span-2">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-[#b45c1d]" />
+                <h3 className="text-sm font-semibold text-slate-900">Upcoming Port Calls</h3>
+              </div>
+              <span className="text-xs text-slate-500">Next 5</span>
+            </div>
+            {upcoming.length === 0 ? (
+              <p className="text-sm text-slate-500">No upcoming port calls.</p>
+            ) : (
+              <div className="space-y-2">
+                {upcoming.map((pc: any) => (
+                  <div key={pc.id} className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{pc.port_name}</p>
+                      <p className="text-[11px] text-slate-500">{pc.voyages?.voyage_reference || "—"} · {pc.activity || ""}</p>
+                    </div>
+                    <span className="text-xs text-slate-500">{pc.eta ? new Date(pc.eta).toLocaleDateString() : "—"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {usage && usage.usage && (
+            <div className="p-4 rounded-2xl border border-slate-200 bg-white shadow-sm md:col-span-3">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-[#1f5da8]" />
+                  <h3 className="text-sm font-semibold text-slate-900">Usage vs Limits</h3>
+                </div>
+                <span className="text-xs text-slate-500">{usage.plan_name || "Plan"}</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  { label: "Admins", used: usage.usage.admins, max: usage.seats_admins },
+                  { label: "Operators", used: usage.usage.operators, max: usage.seats_operators },
+                  { label: "Voyages", used: usage.usage.voyages, max: usage.max_voyages },
+                  { label: "Claims", used: usage.usage.claims, max: usage.max_claims },
+                  { label: "Claims/mo", used: usage.usage.claims_month, max: usage.max_claims_per_month },
+                ].map((item) => {
+                  const maxVal = item.max === null || item.max === undefined ? "∞" : item.max;
+                  return (
+                    <div key={item.label} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="text-xs text-slate-500">{item.label}</p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {item.used}/{maxVal}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

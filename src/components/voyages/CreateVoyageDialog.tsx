@@ -149,6 +149,12 @@ export function CreateVoyageDialog({ lookups, session, defaultTenantId }: Props)
     if (!vesselId) {
       return setError("Select a vessel.");
     }
+    if (cargoQuantity && Number(cargoQuantity) <= 0) {
+      return setError("Cargo quantity must be greater than 0.");
+    }
+    if (!vesselId) {
+      return setError("Select a vessel.");
+    }
 
     setLoading(true);
     try {

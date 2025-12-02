@@ -25,6 +25,12 @@ export function PortCallTimeline({ ports, activeId }: { ports: PortCall[]; activ
     <div className="space-y-4">
       {ports.map((pc, idx) => {
         const isActive = activeId && pc.id === activeId;
+        const statusColor =
+          pc.status === "completed"
+            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+            : pc.status === "in_progress"
+            ? "bg-amber-100 text-amber-800 border-amber-200"
+            : "bg-slate-100 text-slate-700 border-slate-200";
         return (
           <div key={pc.id} className="flex gap-3">
             <div className="flex flex-col items-center">
@@ -35,9 +41,15 @@ export function PortCallTimeline({ ports, activeId }: { ports: PortCall[]; activ
               >
                 {idx === 0 ? <Ship className={`w-4 h-4 ${isActive ? "text-white" : "text-[#1f5da8]"}`} /> : activityIcon(pc.activity)}
               </div>
-              {idx !== ports.length - 1 && <div className="flex-1 w-px bg-slate-200" />}
+              {idx !== ports.length - 1 && (
+                <div className="flex-1 w-px bg-gradient-to-b from-slate-200 via-slate-200 to-slate-200" />
+              )}
             </div>
-            <div className={`flex-1 rounded-xl border ${isActive ? "border-[#1f5da8]/50 bg-[#1f5da8]/5" : "border-slate-200 bg-white"} p-3 shadow-sm`}>
+            <div
+              className={`flex-1 rounded-xl border ${
+                isActive ? "border-[#1f5da8]/50 bg-[#1f5da8]/5" : "border-slate-200 bg-white"
+              } p-3 shadow-sm`}
+            >
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <p className="text-sm font-semibold text-slate-900">
@@ -47,7 +59,7 @@ export function PortCallTimeline({ ports, activeId }: { ports: PortCall[]; activ
                     ETA {pc.eta || "—"} · ETD {pc.etd || "—"}
                   </p>
                 </div>
-                <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                <span className={`text-[11px] font-semibold px-2 py-1 rounded-full border ${statusColor}`}>
                   {pc.status || "planned"}
                 </span>
               </div>

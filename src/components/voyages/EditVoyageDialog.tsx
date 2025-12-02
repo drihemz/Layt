@@ -84,6 +84,10 @@ export function EditVoyageDialog({
       setError("Vessel is required");
       return;
     }
+    if (form.cargo_quantity !== null && form.cargo_quantity !== undefined && form.cargo_quantity <= 0) {
+      setError("Cargo quantity must be greater than 0.");
+      return;
+    }
     setLoading(true);
     try {
       // Only send allowed columns
