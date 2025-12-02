@@ -53,6 +53,7 @@ async function loadClaim(
         "loading_end_at",
         "turn_time_method",
         "term_id",
+        "reversible_pool_ids",
       ].join(",")
     )
     .eq("id", claimId)
@@ -162,7 +163,76 @@ export async function GET(
     .order("created_at", { ascending: false })
     .limit(50);
 
-  return NextResponse.json({ claim, events: hydratedEvents, terms: terms || [], audit: audit || [] });
+  // Sibling claim summaries (same voyage)
+  let siblingSummaries: any[] = [];
+  if (claimAny.voyage_id) {
+    const { data: sibClaims } = await supabase
+      .from("claims")
+      .select(
+        "id, claim_reference, port_call_id, laytime_start, laytime_end, load_discharge_rate, load_discharge_rate_unit, fixed_rate_duration_hours, reversible_pool_ids, voyages(cargo_quantity), port_calls(id, port_name, activity, sequence, allowed_hours)"
+      )
+      .eq("voyage_id", claimAny.voyage_id);
+
+    const siblingIds = (sibClaims || []).map((c: any) => c.id);
+    let siblingEvents: any[] = [];
+    if (siblingIds.length > 0) {
+      const { data: evs } = await supabase
+        .from("calculation_events")
+        .select("id, claim_id, time_used, from_datetime, to_datetime, rate_of_calculation")
+        .in("claim_id", siblingIds);
+      siblingEvents = evs || [];
+    }
+
+    const calcAllowed = (c: any) => {
+      const pc = Array.isArray(c.port_calls) ? c.port_calls[0] : c.port_calls;
+      const qty = c.voyages?.cargo_quantity || 0;
+      if (pc?.allowed_hours !== null && pc?.allowed_hours !== undefined) return Number(pc.allowed_hours);
+      if (!c.load_discharge_rate || c.load_discharge_rate <= 0) return null;
+      if (c.load_discharge_rate_unit === "per_hour") return qty / c.load_discharge_rate;
+      if (c.load_discharge_rate_unit === "fixed_duration") return c.fixed_rate_duration_hours || null;
+      return (qty / c.load_discharge_rate) * 24;
+    };
+
+    siblingSummaries = (sibClaims || []).map((c: any) => {
+      const pc = Array.isArray(c.port_calls) ? c.port_calls[0] : c.port_calls;
+      const allowed = calcAllowed(c);
+      let base = 0;
+      if (c.laytime_start && c.laytime_end) {
+        const s = new Date(c.laytime_start).getTime();
+        const e = new Date(c.laytime_end).getTime();
+        if (!Number.isNaN(s) && !Number.isNaN(e) && e > s) base = (e - s) / 3600000;
+      }
+      const evs = siblingEvents.filter((ev) => ev.claim_id === c.id);
+      const deductions = evs.reduce((sum, ev) => {
+        const t =
+          ev.time_used ??
+          hoursBetween(ev.from_datetime, ev.to_datetime, ev.rate_of_calculation || 100);
+        return sum + (t || 0);
+      }, 0);
+      const used = base > 0 ? Math.max(base - deductions, 0) : base;
+      return {
+        claim_id: c.id,
+        claim_reference: c.claim_reference,
+        port_call_id: c.port_call_id || null,
+        port_name: pc?.port_name || null,
+        activity: pc?.activity || null,
+        sequence: pc?.sequence || null,
+        allowed,
+        base_hours: base,
+        deductions,
+        used,
+        reversible_pool_ids: c.reversible_pool_ids || [],
+      };
+    });
+  }
+
+  return NextResponse.json({
+    claim,
+    events: hydratedEvents,
+    terms: terms || [],
+    audit: audit || [],
+    sibling_summaries: siblingSummaries,
+  });
 }
 
 export async function POST(

@@ -1,7 +1,10 @@
 import "@/styles/globals.css";
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { ModernSideNav } from "@/components/layout/ModernSideNav";
+
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Laytime Platform",
@@ -15,7 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`font-sans antialiased bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50 min-h-screen text-[color:hsl(var(--foreground))]`}>
+      <body className={`${inter.className} antialiased bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50 min-h-screen text-[color:hsl(var(--foreground))]`}>
         <Providers>
           <div className="flex h-screen flex-col md:flex-row md:overflow-hidden">
             <ModernSideNav />

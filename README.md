@@ -83,9 +83,9 @@ npm run dev
 
 ## Current Highlights (see TODO.md for full list)
 - Voyages: create/edit/delete, type-ahead lookups + request-new, plan limits; port calls management (multi-port legs with ETA/ETD/activity/status/sequence + allowed hours for pooling).
-- Claims: extended laytime fields, calculator with SOF events (edit/delete), audit trail, attachments (NOR/SOF), time-format toggle, reversible scope (load-only/discharge-only/all ports) with scope-aware per-port allowed-time pooling, allowed-time preview in create.
+- Claims: extended laytime fields, calculator with SOF events (edit/delete), audit trail, attachments (NOR/SOF), time-format toggle, reversible scope (load-only/discharge-only/all ports) with pooled totals across voyage claims, per-port breakdowns, allowed-time preview in create, and persistent reversible pooling selection (set on claim page or during creation).
 - Data Management: tenant/public lookups, plan-based tab gating, request-new flow.
-- Plans/Billing: plan limits (voyages/claims/month/seats), tenant plan assignment, invoices list/mark paid, usage/limits displayed, seat enforcement on user creation.
+- Plans/Billing: plan limits (voyages/claims/month/seats), tenant plan assignment, invoices list/mark paid, usage/limits displayed, seat enforcement on user creation, data tab toggles.
 - Admin: dashboards, tenant page with usage vs limits, plans editable with data tab toggles.
 
 ## Pending / Planned (summary)

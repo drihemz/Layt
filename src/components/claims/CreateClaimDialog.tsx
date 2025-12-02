@@ -32,6 +32,16 @@ type Voyage = {
 };
 type Tenant = { id: string; name: string };
 type Term = { id: string; name: string };
+type VoyageClaim = {
+  id: string;
+  claim_reference: string;
+  port_call_id?: string | null;
+  operation_type?: string | null;
+  reversible?: boolean | null;
+  reversible_scope?: string | null;
+  reversible_pool_ids?: string[] | null;
+  port_calls?: { id: string; port_name?: string | null; activity?: string | null } | null;
+};
 
 interface Props {
   voyages: Voyage[];
@@ -85,6 +95,8 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
   const [previewAllowed, setPreviewAllowed] = useState<string>("—");
   const [portCalls, setPortCalls] = useState<{ id: string; port_name: string; activity?: string | null }[]>([]);
   const [portCallId, setPortCallId] = useState<string>("none");
+  const [availableClaims, setAvailableClaims] = useState<VoyageClaim[]>([]);
+  const [pooledClaimIds, setPooledClaimIds] = useState<string[]>([]);
 
   const resetForm = () => {
     setClaimRef("");
@@ -161,6 +173,7 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
       if (!voyageId) {
         setPortCalls([]);
         setPortCallId("");
+        setAvailableClaims([]);
         return;
       }
       try {
@@ -178,6 +191,37 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
     }
     fetchPortCalls();
   }, [voyageId, defaultPortCallId]);
+
+  useEffect(() => {
+    async function fetchClaims() {
+      if (!voyageId || !reversible) {
+        setAvailableClaims([]);
+        setPooledClaimIds([]);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/voyages/${voyageId}/claims`);
+        const json = await res.json();
+        if (res.ok) {
+          setAvailableClaims(json.claims || []);
+          // Default pool: this form will become a new claim, so we can preselect scoped claims already pooled together
+          const scopedIds = (json.claims || [])
+            .filter((c: VoyageClaim) => {
+              if (!reversibleScope || reversibleScope === "all_ports") return true;
+              const act = c.port_calls?.activity || c.operation_type;
+              if (reversibleScope === "load_only") return act === "load";
+              if (reversibleScope === "discharge_only") return act === "discharge";
+              return true;
+            })
+            .map((c: VoyageClaim) => c.id);
+          setPooledClaimIds(scopedIds);
+        }
+      } catch (e) {
+        console.error("Failed to load claims", e);
+      }
+    }
+    fetchClaims();
+  }, [voyageId, reversible, reversibleScope]);
 
   const requestNew = async (name: string) => {
     if (!name) return;
@@ -216,6 +260,28 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
     : voyages;
   const selectedVoyage = visibleVoyages.find((v) => v.id === voyageId);
   const superAdminDisabled = isSuperAdmin && !selectedTenantId;
+
+  const scopedAvailableClaims = availableClaims.filter((c) => {
+    if (!reversible) return false;
+    if (!reversibleScope || reversibleScope === "all_ports") return true;
+    const act = c.port_calls?.activity || c.operation_type;
+    if (reversibleScope === "load_only") return act === "load";
+    if (reversibleScope === "discharge_only") return act === "discharge";
+    return true;
+  });
+
+  useEffect(() => {
+    if (!reversible) {
+      setPooledClaimIds([]);
+      return;
+    }
+    const validIds = scopedAvailableClaims.map((c) => c.id);
+    setPooledClaimIds((prev) => prev.filter((id) => validIds.includes(id)));
+  }, [reversible, scopedAvailableClaims.map((c) => c.id).join(",")]);
+
+  const togglePoolClaim = (id: string) => {
+    setPooledClaimIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
 
   useEffect(() => {
     const cargoQty = selectedVoyage?.cargo_quantity || 0;
@@ -295,6 +361,7 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
         term_id: selectedTermId || null,
         reversible_scope: reversibleScope || "all_ports",
         port_call_id: portCallId === "none" ? null : portCallId,
+        reversible_pool_ids: reversible ? pooledClaimIds : [],
       };
       if (isSuperAdmin) {
         payload.tenant_id = selectedTenantId;
@@ -547,6 +614,24 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
                         <SelectItem value="discharge_only">Discharge ports only</SelectItem>
                       </SelectContent>
                     </Select>
+                    {scopedAvailableClaims.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs text-slate-600">Pool with existing claims in this voyage (scope filtered)</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-auto pr-1">
+                          {scopedAvailableClaims.map((c) => (
+                            <label key={c.id} className="flex items-center gap-2 text-sm text-slate-700 border rounded p-2 bg-white">
+                              <Checkbox
+                                checked={pooledClaimIds.includes(c.id)}
+                                onCheckedChange={() => togglePoolClaim(c.id)}
+                              />
+                              <span className="flex-1">
+                                {c.claim_reference} {c.port_calls?.port_name ? `· ${c.port_calls.port_name}` : ""} {c.port_calls?.activity ? `(${c.port_calls.activity})` : ""}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -38,6 +38,7 @@ export async function POST(req: Request) {
       load_discharge_rate_unit,
       fixed_rate_duration_hours,
       reversible = false,
+      reversible_pool_ids,
       reversible_scope,
       demurrage_rate,
       demurrage_currency,
@@ -151,6 +152,7 @@ export async function POST(req: Request) {
       laytime_end,
       turn_time_method,
       term_id,
+      reversible_pool_ids: Array.isArray(reversible_pool_ids) ? reversible_pool_ids : [],
     };
 
     const { data, error } = await supabase
@@ -162,6 +164,26 @@ export async function POST(req: Request) {
     if (error) {
       console.error("Error creating claim", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Sync pooling across claims in the same voyage (only if reversible and pool requested)
+    if (reversible && data?.id) {
+      const { data: voyageClaims } = await supabase
+        .from("claims")
+        .select("id")
+        .eq("voyage_id", voyage_id);
+      const allowedIds = new Set((voyageClaims || []).map((c) => c.id));
+      const requestedIds: string[] = Array.isArray(reversible_pool_ids)
+        ? reversible_pool_ids.filter((id: any) => typeof id === "string" && allowedIds.has(id))
+        : [];
+      const pooledArray = Array.from(new Set([data.id, ...requestedIds]));
+      if (pooledArray.length > 0) {
+        await supabase
+          .from("claims")
+          .update({ reversible_pool_ids: pooledArray })
+          .in("id", pooledArray);
+        data.reversible_pool_ids = pooledArray;
+      }
     }
 
     return NextResponse.json(data, { status: 201 });
