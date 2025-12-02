@@ -50,7 +50,7 @@ export default async function AdminDashboard() {
 
   return (
     <div className="space-y-8">
-      <div className="bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-400 text-white rounded-3xl p-6 shadow-xl">
+      <div className="bg-gradient-to-br from-[#0b1c3a] via-[#123b7a] to-[#0fa3c8] text-white rounded-3xl p-6 shadow-xl border border-white/10">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm uppercase tracking-wide opacity-80">Super Admin</p>
@@ -62,12 +62,12 @@ export default async function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card title="Tenants" value={metrics.tenants} accent="from-blue-500 to-cyan-400" />
-        <Card title="Users" value={metrics.users} accent="from-indigo-500 to-blue-400" />
-        <Card title="Voyages" value={metrics.voyages} accent="from-emerald-500 to-teal-400" />
-        <Card title="Claims" value={metrics.claims} accent="from-amber-500 to-orange-400" />
-        <Card title="Invoices Due/Overdue" value={formatMoney(metrics.totalDue)} accent="from-rose-500 to-orange-400" highlight />
-        <Card title="Invoices Paid" value={formatMoney(metrics.totalPaid)} accent="from-slate-600 to-slate-500" />
+        <Card title="Tenants" value={metrics.tenants} accent="from-[#1f5da8] to-[#0fa3c8]" />
+        <Card title="Users" value={metrics.users} accent="from-[#0f6d82] to-[#1294a6]" />
+        <Card title="Voyages" value={metrics.voyages} accent="from-[#17694c] to-[#1a8c64]" />
+        <Card title="Claims" value={metrics.claims} accent="from-[#b45c1d] to-[#d8742b]" />
+        <Card title="Invoices Due/Overdue" value={formatMoney(metrics.totalDue)} accent="from-[#c13232] to-[#d8742b]" highlight />
+        <Card title="Invoices Paid" value={formatMoney(metrics.totalPaid)} accent="from-slate-500 to-slate-600" />
       </div>
     </div>
   );

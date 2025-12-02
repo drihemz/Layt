@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { PortCallTimeline } from "@/components/voyages/PortCallTimeline";
 
 async function loadPortCall(portCallId: string, sessionTenantId?: string, role?: string) {
   const supabase = createServerClient();
@@ -14,7 +15,12 @@ async function loadPortCall(portCallId: string, sessionTenantId?: string, role?:
   const { data, error } = await query;
   if (error || !data) return null;
   if (role !== "super_admin" && sessionTenantId && data.voyages?.tenant_id !== sessionTenantId) return null;
-  return data;
+  const { data: siblings } = await supabase
+    .from("port_calls")
+    .select("id, port_name, activity, sequence, eta, etd, status")
+    .eq("voyage_id", data.voyage_id)
+    .order("sequence", { ascending: true });
+  return { ...data, sibling_port_calls: siblings || [] };
 }
 
 export default async function PortCallPage({ params }: { params: { portCallId: string } }) {
@@ -28,6 +34,7 @@ export default async function PortCallPage({ params }: { params: { portCallId: s
   }
 
   const claims = data.claims || [];
+  const timelinePorts = (data as any).sibling_port_calls || [];
 
   return (
     <div className="space-y-6">
@@ -71,6 +78,10 @@ export default async function PortCallPage({ params }: { params: { portCallId: s
             <p><span className="font-semibold text-slate-800">ETD:</span> {data.etd || "—"}</p>
             <p><span className="font-semibold text-slate-800">Allowed Hours:</span> {data.allowed_hours ?? "—"}</p>
             <p><span className="font-semibold text-slate-800">Notes:</span> {data.notes || "—"}</p>
+          </div>
+          <div className="pt-3 border-t border-slate-200">
+            <h4 className="text-sm font-semibold text-slate-800 mb-2">Voyage Timeline</h4>
+            <PortCallTimeline ports={timelinePorts} activeId={data.id} />
           </div>
         </div>
       </div>

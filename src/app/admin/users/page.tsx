@@ -45,20 +45,20 @@ export default async function AllUsersPage() {
   const users = await getAllUsers();
 
   return (
-    <div>
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-white">All Users</h2>
+        <h2 className="text-3xl font-bold text-slate-900">All Users</h2>
       </div>
-      <div className="mt-4 rounded-lg border border-gray-700 bg-gray-800/40">
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <Table>
-          <TableHeader>
-            <TableRow className="border-gray-700">
-              <TableHead className="text-white">Full Name</TableHead>
-              <TableHead className="text-white">Email</TableHead>
-              <TableHead className="text-white">Role</TableHead>
-              <TableHead className="text-white">Tenant</TableHead>
-              <TableHead className="text-white">Is Active</TableHead>
-              <TableHead className="text-white">Actions</TableHead>
+          <TableHeader className="bg-slate-50">
+            <TableRow>
+              <TableHead className="text-slate-700">Full Name</TableHead>
+              <TableHead className="text-slate-700">Email</TableHead>
+              <TableHead className="text-slate-700">Role</TableHead>
+              <TableHead className="text-slate-700">Tenant</TableHead>
+              <TableHead className="text-slate-700">Is Active</TableHead>
+              <TableHead className="text-slate-700">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -73,9 +73,9 @@ export default async function AllUsersPage() {
         </Table>
       </div>
       {users.length === 0 && (
-        <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-gray-600 p-12 text-center mt-4">
+        <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-slate-300 p-12 text-center mt-4">
           <div className="text-center">
-            <h3 className="mt-2 text-sm font-semibold text-white">No users found</h3>
+            <h3 className="mt-2 text-sm font-semibold text-slate-700">No users found</h3>
           </div>
         </div>
       )}

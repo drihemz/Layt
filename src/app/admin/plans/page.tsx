@@ -23,7 +23,9 @@ export default async function PlansPage() {
           <p className="text-sm text-slate-600">Create and manage plans and limits.</p>
         </div>
       </div>
-      <PlansManager initialPlans={plans || []} />
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+        <PlansManager initialPlans={plans || []} />
+      </div>
     </div>
   );
 }

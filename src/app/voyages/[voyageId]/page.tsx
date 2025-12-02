@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { PortCallTimeline } from "@/components/voyages/PortCallTimeline";
 
 async function loadVoyage(voyageId: string, tenantId?: string, role?: string) {
   const supabase = createServerClient();
@@ -92,38 +93,43 @@ export default async function VoyageDetailPage({ params }: { params: { voyageId:
           {orderedPorts.length === 0 ? (
             <p className="text-sm text-slate-500">No port calls yet.</p>
           ) : (
-            <div className="space-y-3">
-              {orderedPorts.map((pc: any) => (
-                <div key={pc.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <p className="font-semibold text-slate-900">{pc.sequence || ""} {pc.port_name} ({pc.activity})</p>
-                      <p className="text-xs text-slate-500">ETA {pc.eta || "—"} · ETD {pc.etd || "—"} · {pc.status || "planned"}</p>
-                      {pc.notes && <p className="text-xs text-slate-500">{pc.notes}</p>}
+            <div className="grid gap-4 md:grid-cols-5">
+              <div className="md:col-span-2">
+                <PortCallTimeline ports={orderedPorts} />
+              </div>
+              <div className="md:col-span-3 space-y-3">
+                {orderedPorts.map((pc: any) => (
+                  <div key={pc.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <p className="font-semibold text-slate-900">{pc.sequence || ""} {pc.port_name} ({pc.activity})</p>
+                        <p className="text-xs text-slate-500">ETA {pc.eta || "—"} · ETD {pc.etd || "—"} · {pc.status || "planned"}</p>
+                        {pc.notes && <p className="text-xs text-slate-500">{pc.notes}</p>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Link className="text-[#1f5da8] text-sm" href={`/port-calls/${pc.id}`}>Open</Link>
+                        <Link className="text-[#1f5da8] text-sm" href={`/claims?voyageId=${voyage.id}&portCallId=${pc.id}&openCreate=1`}>Create Claim</Link>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Link className="text-[#1f5da8] text-sm" href={`/port-calls/${pc.id}`}>Open</Link>
-                      <Link className="text-[#1f5da8] text-sm" href={`/claims?voyageId=${voyage.id}&portCallId=${pc.id}&openCreate=1`}>Create Claim</Link>
-                    </div>
-                  </div>
-                  <div className="text-xs text-slate-600">Claims</div>
-                  {claimsByPort[pc.id]?.length ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {claimsByPort[pc.id].map((c) => (
-                        <div key={c.id} className="flex items-center justify-between rounded-lg bg-white border border-slate-200 px-3 py-2">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{c.claim_reference}</p>
-                            <p className="text-[11px] text-slate-500">{c.claim_status}</p>
+                    <div className="text-xs text-slate-600">Claims</div>
+                    {claimsByPort[pc.id]?.length ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {claimsByPort[pc.id].map((c) => (
+                          <div key={c.id} className="flex items-center justify-between rounded-lg bg-white border border-slate-200 px-3 py-2">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">{c.claim_reference}</p>
+                              <p className="text-[11px] text-slate-500">{c.claim_status}</p>
+                            </div>
+                            <Link className="text-[#1f5da8] text-xs font-semibold" href={`/claims/${c.id}/calculation`}>Open</Link>
                           </div>
-                          <Link className="text-[#1f5da8] text-xs font-semibold" href={`/claims/${c.id}/calculation`}>Open</Link>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-500">No claims for this port call.</p>
-                  )}
-                </div>
-              ))}
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500">No claims for this port call.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

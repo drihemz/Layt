@@ -83,17 +83,17 @@ export default function TenantsManager({
   };
 
   return (
-    <div className="mt-2 rounded-lg border border-gray-700 bg-gray-800/40 overflow-x-auto">
-      <table className="min-w-full text-sm text-white">
-        <thead className="bg-gray-800/70">
+    <div className="mt-2 rounded-2xl border border-slate-200 bg-white overflow-x-auto shadow-sm">
+      <table className="min-w-full text-sm text-slate-800">
+        <thead className="bg-slate-50">
           <tr>
-            <th className="px-3 py-2 text-left">Tenant</th>
-            <th className="px-3 py-2 text-left">Plan</th>
-            <th className="px-3 py-2 text-left">Status</th>
-            <th className="px-3 py-2 text-left">Admins</th>
-            <th className="px-3 py-2 text-left">Operators</th>
-            <th className="px-3 py-2 text-left">Usage</th>
-            <th className="px-3 py-2 text-left">Save</th>
+            <th className="px-3 py-2 text-left text-slate-700">Tenant</th>
+            <th className="px-3 py-2 text-left text-slate-700">Plan</th>
+            <th className="px-3 py-2 text-left text-slate-700">Status</th>
+            <th className="px-3 py-2 text-left text-slate-700">Admins</th>
+            <th className="px-3 py-2 text-left text-slate-700">Operators</th>
+            <th className="px-3 py-2 text-left text-slate-700">Usage</th>
+            <th className="px-3 py-2 text-left text-slate-700">Save</th>
           </tr>
         </thead>
         <tbody>
@@ -102,14 +102,14 @@ export default function TenantsManager({
             const usage = usageMap[t.id];
             const fmt = (val?: number | null) => (val === null || val === undefined ? "∞" : val);
             return (
-              <tr key={t.id} className="border-t border-gray-700">
-                <td className="px-3 py-2 font-semibold">{t.name}</td>
+              <tr key={t.id} className="border-t border-slate-200 hover:bg-slate-50">
+                <td className="px-3 py-2 font-semibold text-slate-900">{t.name}</td>
                 <td className="px-3 py-2">
                   <Select value={row.plan_id || ""} onValueChange={(v) => updateField(t.id, "plan_id", v)}>
-                    <SelectTrigger className="w-44 bg-gray-900 border-gray-700">
+                    <SelectTrigger className="w-44 bg-white border-slate-300">
                       <SelectValue placeholder="Select plan" />
                     </SelectTrigger>
-                    <SelectContent className="bg-gray-900 text-white">
+                    <SelectContent>
                       {plans.map((p) => (
                         <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                       ))}
@@ -118,10 +118,10 @@ export default function TenantsManager({
                 </td>
                 <td className="px-3 py-2">
                   <Select value={row.status || "active"} onValueChange={(v) => updateField(t.id, "status", v)}>
-                    <SelectTrigger className="w-32 bg-gray-900 border-gray-700">
+                    <SelectTrigger className="w-32 bg-white border-slate-300">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-gray-900 text-white">
+                    <SelectContent>
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="trialing">Trialing</SelectItem>
                       <SelectItem value="canceled">Canceled</SelectItem>
@@ -131,7 +131,7 @@ export default function TenantsManager({
                 <td className="px-3 py-2">
                   <Input
                     type="number"
-                    className="w-24 bg-gray-900 border-gray-700"
+                    className="w-24 bg-white border-slate-300"
                     value={row.seats_admins ?? ""}
                     onChange={(e) => updateField(t.id, "seats_admins", e.target.value ? Number(e.target.value) : null)}
                   />
@@ -139,12 +139,12 @@ export default function TenantsManager({
                 <td className="px-3 py-2">
                   <Input
                     type="number"
-                    className="w-24 bg-gray-900 border-gray-700"
+                    className="w-24 bg-white border-slate-300"
                     value={row.seats_operators ?? ""}
                     onChange={(e) => updateField(t.id, "seats_operators", e.target.value ? Number(e.target.value) : null)}
                   />
                 </td>
-                <td className="px-3 py-2 text-xs text-gray-200">
+                <td className="px-3 py-2 text-xs text-slate-600">
                   {usage ? (
                     <>
                       <div>Admins {usage.usage.admins}/{fmt(usage.seats_admins)}</div>

@@ -54,11 +54,11 @@ function UserTableRow({ user }: UserTableRowProps) {
   };
 
   return (
-    <TableRow key={user.id} className="border-gray-700">
-      <TableCell>{user.full_name}</TableCell>
-      <TableCell>{user.email}</TableCell>
-      <TableCell>{user.role}</TableCell>
-      <TableCell>{user.is_active ? "Yes" : "No"}</TableCell>
+    <TableRow key={user.id} className="border-slate-200 hover:bg-slate-50">
+      <TableCell className="text-slate-900">{user.full_name}</TableCell>
+      <TableCell className="text-slate-700">{user.email}</TableCell>
+      <TableCell className="text-slate-700 capitalize">{user.role.replace("_", " ")}</TableCell>
+      <TableCell className="text-slate-700">{user.is_active ? "Yes" : "No"}</TableCell>
       <TableCell>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -67,7 +67,7 @@ function UserTableRow({ user }: UserTableRowProps) {
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-gray-800 text-white">
+          <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
             <DropdownMenuItem onClick={handleDeactivate} disabled={!user.is_active}>
               Deactivate

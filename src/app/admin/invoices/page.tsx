@@ -26,7 +26,9 @@ export default async function InvoicesPage() {
           <p className="text-sm text-slate-600">View and update invoice statuses.</p>
         </div>
       </div>
-      <InvoicesManager initialInvoices={invoices || []} />
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+        <InvoicesManager initialInvoices={invoices || []} />
+      </div>
     </div>
   );
 }

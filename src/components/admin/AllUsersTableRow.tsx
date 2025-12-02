@@ -60,12 +60,12 @@ function AllUsersTableRow({ user, roleBadge }: AllUsersTableRowProps) {
   };
 
   return (
-    <TableRow key={user.id} className="border-gray-700">
-      <TableCell>{user.full_name}</TableCell>
-      <TableCell>{user.email}</TableCell>
+    <TableRow key={user.id} className="border-slate-200">
+      <TableCell className="text-slate-900">{user.full_name}</TableCell>
+      <TableCell className="text-slate-700">{user.email}</TableCell>
       <TableCell>{roleBadge}</TableCell>
-      <TableCell>{user.tenants?.name || 'N/A'}</TableCell>
-      <TableCell>{user.is_active ? "Yes" : "No"}</TableCell>
+      <TableCell className="text-slate-700">{user.tenants?.name || 'N/A'}</TableCell>
+      <TableCell className="text-slate-700">{user.is_active ? "Yes" : "No"}</TableCell>
       <TableCell>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -74,7 +74,7 @@ function AllUsersTableRow({ user, roleBadge }: AllUsersTableRowProps) {
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-gray-800 text-white">
+          <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
             <DropdownMenuItem 
               onClick={() => handleUpdateUser(false)} 
