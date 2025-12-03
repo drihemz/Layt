@@ -411,7 +411,7 @@ export default function DashboardClient({ initialStats, session }: DashboardClie
             )}
           </div>
 
-          {usage && usage.usage && (
+          {usage && usage.usage && session?.user?.role !== "operator" && (
             <div className="p-4 rounded-2xl border border-slate-200 bg-white shadow-sm md:col-span-3">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">

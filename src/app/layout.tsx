@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Providers } from "@/components/providers";
 import { ModernSideNav } from "@/components/layout/ModernSideNav";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { NotificationShell } from "@/components/notifications/NotificationShell";
 
 export const metadata: Metadata = {
   title: "Laytime Platform",
@@ -22,9 +23,7 @@ export default function RootLayout({
             <ModernSideNav />
             <div className="flex-grow md:overflow-y-auto bg-gradient-to-br from-[#f4f7fb] via-[#e7eef8] to-[#dfe8f5]">
               <div className="p-4 md:p-8 lg:p-10">
-                <div className="flex justify-end mb-4">
-                  <NotificationBell />
-                </div>
+                <NotificationShell />
                 {children}
               </div>
             </div>

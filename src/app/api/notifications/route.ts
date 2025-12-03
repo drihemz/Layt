@@ -3,18 +3,21 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const { searchParams } = new URL(req.url);
+  const limit = Math.min(parseInt(searchParams.get("limit") || "30", 10), 100);
+  const offset = parseInt(searchParams.get("offset") || "0", 10);
   const supabase = createServerClient();
   let { data, error } = await supabase
     .from("notifications")
     .select("id, title, body, level, read_at, created_at, claim_id")
     .eq("user_id", session.user.id)
     .order("created_at", { ascending: false })
-    .limit(30);
+    .range(offset, offset + limit - 1);
 
   // Fallback if claim_id column is missing (older DB)
   if (error && (error as any).code === "42703") {

@@ -96,6 +96,9 @@ This file tracks the development progress of the Laytime Platform. It is designe
 - [x] Reversible pooling selection persists per claim, syncs across pooled claims, and can be set during claim creation with scoped voyage claims.
 - [x] Build hardened for restricted environments by removing external Google Fonts dependency (local sans stack).
 - [x] Added QC scaffolding: claim stores `qc_status`/`qc_reviewer_id`/`qc_notes` with UI to edit; claim-level comments API + UI for messaging. Migration 020 adds QC columns and `claim_comments`.
+- [x] Notifications: tables/policies (022/023/024), API `/api/notifications`, notification bell with per-item mark-read and claim deep links; QC assignments/status changes and comments notify the reviewer.
+- [x] Claims UX: status/reviewer chips and filters on claims list; voyage/port-call views show chips; dashboard “My Queue” + unread badge; per-port breakdown hidden for non-reversible claims.
+- [x] Attachments trigger notifications to assigned reviewer.
 - [x] Improve non-reversible per-port balances and expose per-port breakdowns when pooling is off.
 - [x] Refine reversible pooling math when laytime span is missing (ensure pooled allowed minus pooled deductions logic matches charter terms).
 - [x] Voyage detail/port-call pages restyled with richer port-call claims summary and upcoming legs timeline-style layout.

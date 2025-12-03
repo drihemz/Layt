@@ -18,13 +18,16 @@ type Notification = {
 };
 
 export function NotificationBell() {
+  const PAGE_SIZE = 5;
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [offset, setOffset] = useState(0);
   const { status } = useSession();
 
-  const unreadCount = notifications.length;
+  const unreadCount = notifications.filter((n) => !n.read_at).length;
 
   const iconForLevel = (level: Notification["level"]) => {
     if (level === "success") return <CheckCircle className="w-4 h-4 text-emerald-600" />;
@@ -32,35 +35,50 @@ export function NotificationBell() {
     return <Info className="w-4 h-4 text-blue-600" />;
   };
 
-  useEffect(() => {
+  const loadPage = async (nextOffset = 0) => {
     if (status !== "authenticated") return;
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch("/api/notifications");
-        const json = await res.json();
-        if (res.ok && json.notifications) {
-          const mapped = json.notifications.map((n: any) => ({
-            id: n.id,
-            claim_id: n.claim_id,
-            title: n.title,
-            message: n.body,
-            level: (n.level as Notification["level"]) || "info",
-            timestamp: new Date(n.created_at || Date.now()).toLocaleString(),
-            read_at: n.read_at,
-          }));
-          setNotifications(mapped.filter((n: any) => !n.read_at));
-        } else if (!res.ok) {
-          setError(json.error || "Failed to load notifications");
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/notifications?limit=${PAGE_SIZE}&offset=${nextOffset}`);
+      const json = await res.json();
+      if (res.ok && json.notifications) {
+        const mapped = json.notifications.map((n: any) => ({
+          id: n.id,
+          claim_id: n.claim_id,
+          title: n.title,
+          message: n.body,
+          level: (n.level as Notification["level"]) || "info",
+          timestamp: new Date(n.created_at || Date.now()).toLocaleString(),
+          read_at: n.read_at,
+        }));
+        if (nextOffset === 0) {
+          setNotifications(mapped);
+        } else {
+          setNotifications((prev) => {
+            const existing = new Set(prev.map((p) => p.id));
+            const merged = [...prev];
+            mapped.forEach((m: Notification) => {
+              if (!existing.has(m.id)) merged.push(m);
+            });
+            return merged;
+          });
         }
-      } catch {
-        setError("Failed to load notifications");
-      } finally {
-        setLoading(false);
+        setHasMore(json.notifications.length === PAGE_SIZE);
+        setOffset(nextOffset + PAGE_SIZE);
+      } else if (!res.ok) {
+        setError(json.error || "Failed to load notifications");
       }
-    };
-    load();
+    } catch {
+      setError("Failed to load notifications");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPage(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
   const markAllRead = async () => {
@@ -69,7 +87,7 @@ export function NotificationBell() {
     } catch {
       // ignore
     } finally {
-      setNotifications([]);
+      setNotifications((prev) => prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
       setOpen(false);
     }
   };
@@ -84,7 +102,9 @@ export function NotificationBell() {
     } catch {
       // ignore
     } finally {
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, read_at: n.read_at || new Date().toISOString() } : n))
+      );
     }
   };
 
@@ -130,7 +150,11 @@ export function NotificationBell() {
                   key={n.id}
                   className={cn(
                     "p-2 rounded-lg border flex gap-2 items-start",
-                    n.level === "warning" ? "border-amber-200 bg-amber-50/70" : "border-blue-100 bg-slate-50"
+                    n.read_at
+                      ? "border-slate-200 bg-slate-50/70"
+                      : n.level === "warning"
+                      ? "border-amber-200 bg-amber-50/70"
+                      : "border-blue-100 bg-slate-50"
                   )}
                 >
                   <div className="mt-0.5">{iconForLevel(n.level)}</div>
@@ -158,6 +182,19 @@ export function NotificationBell() {
                   </div>
                 </div>
               ))}
+              {hasMore && (
+                <div className="pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs"
+                    disabled={loading}
+                    onClick={() => loadPage(offset)}
+                  >
+                    {loading ? "Loading..." : "Load more"}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>

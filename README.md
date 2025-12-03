@@ -90,6 +90,9 @@ npm run dev
 - Fonts: uses Tailwind's sans stack locally (no external Google Fonts fetch) to keep builds working in restricted environments.
 - Branding/theme: unified sapphire/teal palette across core, admin, and customer-admin pages; port-call timelines with status badges; dashboard shows claims by status, upcoming port calls, and usage vs limits.
 - QC & collaboration: claims now store QC status/reviewer/notes and support claim-level comments/messaging (API + UI); migration `020_qc_and_comments` adds QC columns and `claim_comments`.
+- Notifications: notifications table/policies (`022_notifications`, `023_notifications_policies`, `024_notifications_policy_update`), API `/api/notifications`, notification bell with per-item mark-read and claim deep links; QC, reviewer changes, and comments trigger notifications.
+- Claims UX: status/reviewer chips, filters; voyage/port-call views show chips; non-reversible claims hide per-port breakdown; dashboard adds “My Queue” (assigned reviewer) and unread count.
+- Attachments: uploads now notify assigned reviewer.
 - Future roadmap ideas (not yet implemented): deeper QC approvals/validation, external sharing/third-party review, versioning/diffs, SOF parsing + master SOF data, contract-driven auto-calcs, AI assistance, and GDPR-focused audit/retention tooling.
 
 ## Pending / Planned (summary)

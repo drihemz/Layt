@@ -9,7 +9,7 @@ async function loadPortCall(portCallId: string, sessionTenantId?: string, role?:
   const supabase = createServerClient();
   let query = supabase
     .from("port_calls")
-    .select("*, voyages(voyage_reference, id, tenant_id), claims:claims(*)")
+    .select("*, voyages(voyage_reference, id, tenant_id), claims:claims(id, claim_reference, claim_status, qc_reviewer_id, qc_reviewer:users!qc_reviewer_id(full_name))")
     .eq("id", portCallId)
     .single();
   const { data, error } = await query;
@@ -63,7 +63,12 @@ export default async function PortCallPage({ params }: { params: { portCallId: s
                 <li key={c.id} className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
                   <div>
                     <p className="font-semibold text-slate-900">{c.claim_reference}</p>
-                    <p className="text-xs text-slate-500">{c.claim_status}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] px-2 py-1 rounded-full bg-slate-100 border border-slate-200 capitalize">{c.claim_status?.replace("_", " ")}</span>
+                      {c.qc_reviewer_id && (
+                        <span className="text-[11px] px-2 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-700">{c.qc_reviewer?.full_name || "Reviewer"}</span>
+                      )}
+                    </div>
                   </div>
                   <Link className="text-[#1f5da8] text-sm font-semibold" href={`/claims/${c.id}/calculation`}>Open</Link>
                 </li>

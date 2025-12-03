@@ -36,7 +36,7 @@ async function loadVoyage(voyageId: string, tenantId?: string, role?: string) {
 
   const claimsQuery = supabase
     .from("claims")
-    .select("id, claim_reference, claim_status, port_call_id")
+    .select("id, claim_reference, claim_status, port_call_id, qc_reviewer_id, qc_reviewer:users!qc_reviewer_id(full_name)")
     .eq("voyage_id", voyageId);
   const { data: claims } = await claimsQuery;
 
@@ -118,7 +118,12 @@ export default async function VoyageDetailPage({ params }: { params: { voyageId:
                           <div key={c.id} className="flex items-center justify-between rounded-lg bg-white border border-slate-200 px-3 py-2">
                             <div>
                               <p className="text-sm font-semibold text-slate-900">{c.claim_reference}</p>
-                              <p className="text-[11px] text-slate-500">{c.claim_status}</p>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] px-2 py-1 rounded-full bg-slate-100 border border-slate-200 capitalize">{c.claim_status?.replace("_", " ")}</span>
+                                {c.qc_reviewer_id && (
+                                  <span className="text-[11px] px-2 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-700">{(c as any).qc_reviewer?.full_name || "Reviewer"}</span>
+                                )}
+                              </div>
                             </div>
                             <Link className="text-[#1f5da8] text-xs font-semibold" href={`/claims/${c.id}/calculation`}>Open</Link>
                           </div>
@@ -145,7 +150,12 @@ export default async function VoyageDetailPage({ params }: { params: { voyageId:
                 <li key={c.id} className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{c.claim_reference}</p>
-                    <p className="text-[11px] text-slate-500">{c.claim_status}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] px-2 py-1 rounded-full bg-slate-100 border border-slate-200 capitalize">{c.claim_status?.replace("_", " ")}</span>
+                      {c.qc_reviewer_id && (
+                        <span className="text-[11px] px-2 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-700">{(c as any).qc_reviewer?.full_name || "Reviewer"}</span>
+                      )}
+                    </div>
                   </div>
                   <Link className="text-[#1f5da8] text-xs font-semibold" href={`/claims/${c.id}/calculation`}>Open</Link>
                 </li>

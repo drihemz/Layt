@@ -4,7 +4,11 @@ import { authOptions } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 
 async function loadClaim(supabase: ReturnType<typeof createServerClient>, claimId: string) {
-  const { data, error } = await supabase.from("claims").select("id, tenant_id").eq("id", claimId).single();
+  const { data, error } = await supabase
+    .from("claims")
+    .select("id, tenant_id, qc_reviewer_id, claim_reference")
+    .eq("id", claimId)
+    .single();
   if (error || !data) return null;
   return data;
 }
@@ -87,6 +91,22 @@ export async function POST(req: Request, { params }: { params: { claimId: string
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Notify assigned reviewer if someone else uploaded
+  try {
+    if (claim.qc_reviewer_id && claim.qc_reviewer_id !== session.user.id) {
+      await supabase.from("notifications").insert({
+        user_id: claim.qc_reviewer_id,
+        tenant_id: claim.tenant_id,
+        claim_id: claim.id,
+        title: "New attachment uploaded",
+        body: `Claim ${claim.claim_reference || ""} has a new ${attachment_type.toUpperCase()} attachment (${file.name}).`,
+        level: "info",
+      });
+    }
+  } catch (notifyErr) {
+    console.error("Attachment notification failed", notifyErr);
   }
 
   return NextResponse.json({ attachment: data }, { status: 201 });
