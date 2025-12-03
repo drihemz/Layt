@@ -12,7 +12,22 @@ async function loadClaims(tenantId?: string, search?: string) {
   const supabase = createServerClient();
   let query = supabase
     .from("claims")
-    .select("id, claim_reference, claim_status, operation_type, port_name, laycan_start, laycan_end, created_at, voyages(voyage_reference), tenant_id")
+    .select(
+      [
+        "id",
+        "claim_reference",
+        "claim_status",
+        "qc_reviewer_id",
+        "qc_reviewer:users!qc_reviewer_id(full_name)",
+        "operation_type",
+        "port_name",
+        "laycan_start",
+        "laycan_end",
+        "created_at",
+        "voyages(voyage_reference)",
+        "tenant_id",
+      ].join(",")
+    )
     .order("created_at", { ascending: false });
 
   if (tenantId) {
@@ -31,6 +46,7 @@ async function loadClaims(tenantId?: string, search?: string) {
   return (data || []).map((c: any) => ({
     ...c,
     voyages: Array.isArray(c.voyages) ? c.voyages[0] : c.voyages || null,
+    qc_reviewer: Array.isArray(c.qc_reviewer) ? c.qc_reviewer[0] : c.qc_reviewer || null,
   }));
 }
 

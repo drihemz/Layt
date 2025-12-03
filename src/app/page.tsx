@@ -5,7 +5,7 @@ import { getTenantPlanUsage } from "@/lib/tenant-plan";
 import DashboardClient from "@/components/dashboard/DashboardClient";
 import { redirect } from "next/navigation";
 
-async function getStats(tenantId: string) {
+async function getStats(tenantId: string, userId: string) {
   const supabase = createServerClient();
   const usage = await getTenantPlanUsage(tenantId).catch(() => null);
 
@@ -18,6 +18,8 @@ async function getStats(tenantId: string) {
     recentClaims,
     statusClaims,
     upcomingPortCalls,
+    myQueue,
+    unread,
   ] = await Promise.all([
     supabase
       .from("voyages")
@@ -58,6 +60,18 @@ async function getStats(tenantId: string) {
       .eq("tenant_id", tenantId)
       .order("eta", { ascending: true })
       .limit(5),
+    supabase
+      .from("claims")
+      .select("id, claim_reference, claim_status, port_name, voyages(voyage_reference)")
+      .eq("tenant_id", tenantId)
+      .eq("qc_reviewer_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("notifications")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .is("read_at", null),
   ]);
 
   const totalAmount = claimsData.data?.reduce(
@@ -78,6 +92,8 @@ async function getStats(tenantId: string) {
       return acc;
     }, {}),
     upcomingPortCalls: upcomingPortCalls.data || [],
+    myQueue: myQueue.data || [],
+    unreadCount: unread.count || 0,
     usage,
   };
 }
@@ -101,7 +117,7 @@ export default async function DashboardPage() {
     redirect("/auth/login");
   }
 
-  const stats = await getStats(session.user.tenantId);
+  const stats = await getStats(session.user.tenantId, session.user.id);
 
   return <DashboardClient initialStats={stats} session={session} />;
 }

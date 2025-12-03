@@ -21,6 +21,8 @@ type Claim = {
   id: string;
   claim_reference: string;
   claim_status: string;
+  qc_reviewer_id?: string | null;
+  qc_reviewer?: { full_name?: string | null } | null;
   operation_type?: string | null;
   port_name?: string | null;
   laycan_start?: string | null;
@@ -61,6 +63,8 @@ export default function ClaimsClient({
   const [searchTerm, setSearchTerm] = useState(search || "");
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [tenantValue, setTenantValue] = useState(tenantIdFilter || "");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [reviewerFilter, setReviewerFilter] = useState<string>("");
 
   useEffect(() => {
     if (isSuperAdmin) {
@@ -122,6 +126,14 @@ export default function ClaimsClient({
     router.push(`${pathname}?${params.toString()}`);
   };
 
+  const reviewers = Array.from(
+    new Map(
+      claims
+        .filter((c) => c.qc_reviewer_id && c.qc_reviewer?.full_name)
+        .map((c) => [c.qc_reviewer_id as string, c.qc_reviewer?.full_name || "Reviewer"])
+    ).entries()
+  ).map(([id, name]) => ({ id, name }));
+
   const formatDate = (value?: string | null) => {
     if (!value) return "—";
     const d = new Date(value);
@@ -164,6 +176,34 @@ export default function ClaimsClient({
             />
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
           </div>
+          <Select value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
+            <SelectTrigger className="w-40 bg-white border-slate-200">
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="created">Created</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="for_qc">For QC</SelectItem>
+              <SelectItem value="qc_in_progress">QC in Progress</SelectItem>
+              <SelectItem value="pending_reply">Pending Reply</SelectItem>
+              <SelectItem value="missing_information">Missing Information</SelectItem>
+              <SelectItem value="pending_counter_check">Pending Counter Check</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={reviewerFilter || "all"} onValueChange={(v) => setReviewerFilter(v === "all" ? "" : v)}>
+            <SelectTrigger className="w-48 bg-white border-slate-200">
+              <SelectValue placeholder="All reviewers" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All reviewers</SelectItem>
+              {reviewers.map((r) => (
+                <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <CreateClaimDialog
             voyages={voyages}
             tenantId={tenantValue}
@@ -197,11 +237,23 @@ export default function ClaimsClient({
                 </TableCell>
               </TableRow>
             )}
-            {claims.map((claim) => (
+            {claims
+              .filter((c) => (statusFilter ? c.claim_status === statusFilter : true))
+              .filter((c) => (reviewerFilter ? c.qc_reviewer_id === reviewerFilter : true))
+              .map((claim) => (
               <TableRow key={claim.id}>
                 <TableCell className="font-semibold text-slate-900">{claim.claim_reference}</TableCell>
                 <TableCell className="text-slate-700">{claim.voyages?.voyage_reference || "—"}</TableCell>
-                <TableCell className="capitalize text-slate-700">{claim.claim_status.replace("_", " ")}</TableCell>
+                <TableCell className="text-slate-700">
+                  <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-slate-100 border border-slate-200">
+                    {claim.claim_status.replace("_", " ")}
+                  </span>
+                  {claim.qc_reviewer_id && (
+                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-50 border border-blue-100 text-blue-700 ml-2">
+                      {claim.qc_reviewer?.full_name || "Reviewer"}
+                    </span>
+                  )}
+                </TableCell>
                 <TableCell className="text-sm text-slate-600">
                   {claim.operation_type || "—"} {claim.port_name ? ` / ${claim.port_name}` : ""}
                 </TableCell>

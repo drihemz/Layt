@@ -14,6 +14,8 @@ interface Stats {
   recentClaims: any[];
   claimsByStatus?: Record<string, number>;
   upcomingPortCalls?: any[];
+  myQueue?: any[];
+  unreadCount?: number;
   usage?: {
     plan_name?: string | null;
     max_voyages?: number | null;
@@ -93,6 +95,8 @@ export default function DashboardClient({ initialStats, session }: DashboardClie
     : [];
   const upcoming = initialStats.upcomingPortCalls || [];
   const usage = initialStats.usage;
+  const myQueue = initialStats.myQueue || [];
+  const unread = initialStats.unreadCount || 0;
 
   return (
     <div className="space-y-10">
@@ -124,6 +128,14 @@ export default function DashboardClient({ initialStats, session }: DashboardClie
                 <Ship className="w-4 h-4" />
               </div>
               <p className="text-2xl font-bold">{initialStats.totalVoyages}</p>
+            </div>
+            <div className="rounded-2xl bg-white/10 border border-white/15 p-3 shadow-lg col-span-2">
+              <div className="flex items-center justify-between text-xs text-white/70 mb-1">
+                <span>My queue</span>
+                <Clock className="w-4 h-4" />
+              </div>
+              <p className="text-xl font-bold">{myQueue.length} claims</p>
+              <p className="text-[11px] text-white/70">{unread} unread notifications</p>
             </div>
           </div>
         </div>
@@ -319,7 +331,7 @@ export default function DashboardClient({ initialStats, session }: DashboardClie
           </div>
         </div>
 
-        {/* Claims by Status / Upcoming / Usage */}
+        {/* Claims by Status / My Queue / Upcoming / Usage */}
         <div className="space-y-4 lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between mb-3">
@@ -338,6 +350,37 @@ export default function DashboardClient({ initialStats, session }: DashboardClie
                     <span className="text-sm font-semibold text-slate-800 capitalize">{status.replace("_", " ")}</span>
                     <span className="text-sm font-bold text-[#1f5da8]">{count}</span>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-[#1f5da8]" />
+                <h3 className="text-sm font-semibold text-slate-900">My Queue</h3>
+              </div>
+              <span className="text-xs text-slate-500">{unread} unread</span>
+            </div>
+            {myQueue.length === 0 ? (
+              <p className="text-sm text-slate-500">No assigned claims.</p>
+            ) : (
+              <div className="space-y-2">
+                {myQueue.map((c: any) => (
+                  <Link
+                    key={c.id}
+                    href={`/claims/${c.id}/calculation`}
+                    className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 hover:border-[#1f5da8]/50"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{c.claim_reference}</p>
+                      <p className="text-[11px] text-slate-500">{c.voyages?.voyage_reference || "—"} · {c.port_name || ""}</p>
+                    </div>
+                    <span className="text-[11px] px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 capitalize">
+                      {c.claim_status?.replace("_", " ")}
+                    </span>
+                  </Link>
                 ))}
               </div>
             )}
