@@ -239,6 +239,7 @@ export async function PUT(
           title,
           body,
           level: reviewerChanged ? "info" : "success",
+          claim_id: existingClaim.id,
         });
       }
     } catch (notifyError) {

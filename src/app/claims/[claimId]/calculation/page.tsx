@@ -360,6 +360,13 @@ function Summary({
   const portsForTotals = scopedPorts.length > 0 ? scopedPorts : allPorts;
 
   const scopedEvents = events.filter((ev) => {
+    // For non-reversible, only keep events tied to this claim's port_call (if set); otherwise all.
+    if (!claim.reversible) {
+      if (claim.port_call_id) {
+        return ev.port_call_id === claim.port_call_id || !ev.port_call_id;
+      }
+      return true;
+    }
     const act = ev.port_calls?.activity;
     if (!act) return true; // keep untagged events
     if (!claim.reversible_scope || claim.reversible_scope === "all_ports") return true;
@@ -538,70 +545,44 @@ function Summary({
   const despatch =
     timeOver !== null && timeOver > 0 ? timeOver * (despatchRate / 24) : 0;
 
-  // Build per-port breakdown (including unassigned)
+  // Build per-port breakdown (only for reversible claims)
   const breakdown = (() => {
-    const ordered = (claim.reversible ? scopedPorts : allPorts)
-      .slice()
-      .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    if (!claim.reversible) return [];
+
+    const ordered = scopedPorts.slice().sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
 
     const rows = ordered.map((pc) => {
-      if (claim.reversible) {
-        const sibling =
-          effectiveSiblings.find((s) => s.claim_id === claim.id && s.port_call_id === pc.id) ||
-          effectiveSiblings.find((s) => s.port_call_id === pc.id) ||
-          effectiveSiblings.find((s) => !s.port_call_id && (!s.activity || s.activity === pc.activity));
-        if (!sibling) {
-          return {
-            id: pc.id,
-            label: pc.port_name || "Port",
-            activity: pc.activity || "",
-            allowed: null,
-            base: 0,
-            deductions: 0,
-            used: 0,
-            inScope: true,
-            overUnder: null,
-            note: "Claim not created yet",
-          };
-        }
-        const overUnder =
-          sibling.allowed !== null && sibling.allowed !== undefined
-            ? (sibling.allowed || 0) - (sibling.used || 0)
-            : null;
-
+      const sibling =
+        effectiveSiblings.find((s) => s.claim_id === claim.id && s.port_call_id === pc.id) ||
+        effectiveSiblings.find((s) => s.port_call_id === pc.id) ||
+        effectiveSiblings.find((s) => !s.port_call_id && (!s.activity || s.activity === pc.activity));
+      if (!sibling) {
         return {
           id: pc.id,
           label: pc.port_name || "Port",
           activity: pc.activity || "",
-          allowed: sibling.allowed,
-          base: sibling.base_hours,
-          deductions: sibling.deductions,
-          used: sibling.used,
+          allowed: null,
+          base: 0,
+          deductions: 0,
+          used: 0,
           inScope: true,
-          overUnder,
-          note: undefined,
+          overUnder: null,
+          note: "Claim not created yet",
         };
       }
-
-      const portAllowed =
-        pc.allowed_hours !== null && pc.allowed_hours !== undefined
-          ? Number(pc.allowed_hours)
-          : pc.id === claim.port_call_id
-          ? totalAllowed
+      const overUnder =
+        sibling.allowed !== null && sibling.allowed !== undefined
+          ? (sibling.allowed || 0) - (sibling.used || 0)
           : null;
-      const base = pc.id === claim.port_call_id ? baseSpanHours : 0;
-      const deductions = deductionsByPort[pc.id] || 0;
-      const used = base > 0 ? Math.max(base - deductions, 0) : deductions;
-      const overUnder = portAllowed !== null ? (portAllowed || 0) - (used || 0) : null;
 
       return {
         id: pc.id,
         label: pc.port_name || "Port",
         activity: pc.activity || "",
-        allowed: portAllowed,
-        base,
-        deductions,
-        used,
+        allowed: sibling.allowed,
+        base: sibling.base_hours,
+        deductions: sibling.deductions,
+        used: sibling.used,
         inScope: true,
         overUnder,
         note: undefined,
@@ -1021,6 +1002,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
     !qcAssignedId ||
     currentUser?.role === "super_admin" ||
     (currentUser?.id && qcAssignedId === currentUser.id);
+  const qcLocked = !!qcAssignedId && !canEditQc;
 
   if (loading) {
     return (
@@ -1369,6 +1351,11 @@ export default function CalculationPage({ params }: { params: { claimId: string 
             <p className="text-xs text-slate-500">
               Track review status, reviewer, and notes. Only the assigned reviewer (or super admin) can change status/notes once assigned.
             </p>
+            {qcLocked && (
+              <p className="text-[11px] text-amber-700 mt-1">
+                Locked because you are not the assigned reviewer. Ask the reviewer or a super admin to update status/notes.
+              </p>
+            )}
           </div>
           <Button onClick={saveClaimDetails} disabled={savingClaim || (!canEditQc && !!qcAssignedId)}>
             {savingClaim ? "Saving..." : canEditQc || !qcAssignedId ? "Save QC" : "Locked"}

@@ -9,12 +9,24 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const supabase = createServerClient();
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("notifications")
-    .select("id, title, body, level, read_at, created_at")
+    .select("id, title, body, level, read_at, created_at, claim_id")
     .eq("user_id", session.user.id)
     .order("created_at", { ascending: false })
     .limit(30);
+
+  // Fallback if claim_id column is missing (older DB)
+  if (error && (error as any).code === "42703") {
+    const alt = await supabase
+      .from("notifications")
+      .select("id, title, body, level, read_at, created_at")
+      .eq("user_id", session.user.id)
+      .order("created_at", { ascending: false })
+      .limit(30);
+    data = (alt.data || []).map((n: any) => ({ ...n, claim_id: null }));
+    error = alt.error;
+  }
 
   if (error) {
     console.error("GET /api/notifications error", error);
@@ -24,17 +36,25 @@ export async function GET() {
   return NextResponse.json({ notifications: data || [] });
 }
 
-export async function PATCH() {
+export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const body = await req.json().catch(() => ({}));
+  const ids: string[] = Array.isArray(body.ids) ? body.ids : [];
   const supabase = createServerClient();
-  const { error } = await supabase
+  let query = supabase
     .from("notifications")
     .update({ read_at: new Date().toISOString() })
     .eq("user_id", session.user.id)
     .is("read_at", null);
+
+  if (ids.length > 0) {
+    query = query.in("id", ids);
+  }
+
+  const { error } = await query;
 
   if (error) {
     console.error("PATCH /api/notifications error", error);
