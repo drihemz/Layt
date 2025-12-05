@@ -29,6 +29,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Plus } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { SofExtractEvent, SofExtractResult } from "@/lib/sof-extractor";
 
 type Claim = {
   id: string;
@@ -1199,6 +1200,8 @@ function SofExtractorTab({
   const sortedEvents = [...events].sort(
     (a, b) => new Date(a.from_datetime).getTime() - new Date(b.from_datetime).getTime()
   );
+  const [extracted, setExtracted] = useState<SofExtractResult | null>(null);
+  const [extractError, setExtractError] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
@@ -1208,7 +1211,13 @@ function SofExtractorTab({
           <h2 className="text-2xl font-semibold text-slate-900">Statement of Facts</h2>
           <p className="text-xs text-slate-600">Upload SOF, extract events, and reconcile with laytime.</p>
         </div>
-        <Button size="sm">Launch extractor</Button>
+        <SofExtractorPanel
+          onResult={(r) => {
+            setExtracted(r);
+            setExtractError(r.error || null);
+          }}
+          onError={(msg) => setExtractError(msg)}
+        />
       </div>
 
       <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm space-y-2">
@@ -1233,6 +1242,12 @@ function SofExtractorTab({
           <CalendarIcon className="w-4 h-4 text-slate-500" />
           <p className="text-sm font-semibold text-slate-800">SOF timeline</p>
         </div>
+        {extractError && <p className="text-xs text-red-600 mb-2">Extraction error: {extractError}</p>}
+        {extracted?.events?.length ? (
+          <div className="mb-3 p-3 rounded-lg border border-emerald-100 bg-emerald-50 text-xs text-emerald-800">
+            {extracted.events.length} extracted rows ready to review. Low-confidence rows will need a manual check.
+          </div>
+        ) : null}
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -1247,24 +1262,35 @@ function SofExtractorTab({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedEvents.length === 0 ? (
+              {(extracted?.events || sortedEvents).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-sm text-slate-500 py-6">
                     No events yet.
                   </TableCell>
                 </TableRow>
               ) : (
-                sortedEvents.map((ev, idx) => (
+                (extracted?.events || sortedEvents).map((ev: any, idx: number) => (
                   <TableRow key={ev.id}>
                     <TableCell className="text-xs text-slate-500">{idx + 1}</TableCell>
-                    <TableCell className="font-semibold text-slate-800">{ev.deduction_name}</TableCell>
-                    <TableCell className="text-sm text-slate-700">
-                      {ev.port_calls?.port_name || "—"} {ev.port_calls?.activity ? `(${ev.port_calls.activity})` : ""}
+                    <TableCell className="font-semibold text-slate-800">
+                      {ev.deduction_name || ev.event || "—"}
+                      {typeof ev.confidence === "number" && (
+                        <span className="ml-2 text-[10px] text-slate-500">({Math.round(ev.confidence * 100)}%)</span>
+                      )}
                     </TableCell>
-                    <TableCell className="text-sm text-slate-700">{formatDate(ev.from_datetime)}</TableCell>
-                    <TableCell className="text-sm text-slate-700">{formatDate(ev.to_datetime)}</TableCell>
-                    <TableCell className="text-sm text-slate-700">{ev.rate_of_calculation}%</TableCell>
-                    <TableCell className="text-sm text-slate-900">{formatHours(ev.time_used || 0, timeFormat)}</TableCell>
+                    <TableCell className="text-sm text-slate-700">
+                      {ev.port_calls?.port_name || ev.portCallName || "—"} {ev.port_calls?.activity ? `(${ev.port_calls.activity})` : ""}
+                    </TableCell>
+                    <TableCell className="text-sm text-slate-700">{formatDate(ev.from_datetime || ev.start)}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{formatDate(ev.to_datetime || ev.end)}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{ev.rate_of_calculation ?? ev.ratePercent ?? "—"}%</TableCell>
+                    <TableCell className="text-sm text-slate-900">
+                      {formatHours(
+                        ev.time_used ??
+                          (ev.start && ev.end ? durationHours(ev.start, ev.end, ev.ratePercent || ev.rate_of_calculation || 100) : 0),
+                        timeFormat
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -1275,6 +1301,66 @@ function SofExtractorTab({
           Extraction will map SOF rows into laytime events and flag mismatches for review.
         </p>
       </div>
+    </div>
+  );
+}
+
+function SofExtractorPanel({ onResult, onError }: { onResult?: (r: SofExtractResult) => void; onError?: (msg: string) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<SofExtractResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFile = async (file?: File | null) => {
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    setResult(null);
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await fetch("/api/sof-extract", {
+        method: "POST",
+        body: form,
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.error || "Extraction failed");
+        onError?.(json?.error || "Extraction failed");
+        return;
+      }
+      const typed = json as SofExtractResult;
+      setResult(typed);
+      onResult?.(typed);
+    } catch (err: any) {
+      setError(err?.message || "Extraction failed");
+      onError?.(err?.message || "Extraction failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-end gap-2">
+      <Button size="sm" onClick={() => document.getElementById("sof-extract-upload")?.click()} disabled={uploading}>
+        {uploading ? "Extracting…" : "Upload & Extract"}
+      </Button>
+      <input
+        id="sof-extract-upload"
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          handleFile(f);
+          e.target.value = "";
+        }}
+      />
+      {error && <p className="text-xs text-red-600 max-w-xs text-right">{error}</p>}
+      {result && (
+        <div className="text-right text-xs text-slate-600">
+          {result.warnings?.length ? `Warnings: ${result.warnings.join("; ")}` : "Extraction complete"}
+        </div>
+      )}
     </div>
   );
 }
