@@ -242,7 +242,11 @@ export default function ClaimsClient({
               .filter((c) => (reviewerFilter ? c.qc_reviewer_id === reviewerFilter : true))
               .map((claim) => (
               <TableRow key={claim.id}>
-                <TableCell className="font-semibold text-slate-900">{claim.claim_reference}</TableCell>
+                <TableCell className="font-semibold text-slate-900">
+                  <Link href={`/claims/${claim.id}/calculation`} className="text-[#1f5da8] hover:text-[#0f3c7a]">
+                    {claim.claim_reference}
+                  </Link>
+                </TableCell>
                 <TableCell className="text-slate-700">{claim.voyages?.voyage_reference || "—"}</TableCell>
                 <TableCell className="text-slate-700">
                   <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-slate-100 border border-slate-200">

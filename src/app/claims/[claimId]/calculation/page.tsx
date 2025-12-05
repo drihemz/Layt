@@ -20,6 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Plus } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -314,6 +320,220 @@ function AddEventForm({
       </form>
     </div>
   );
+}
+
+function buildStatementSnapshot({
+  claim,
+  events,
+  siblings,
+}: {
+  claim: Claim;
+  events: EventRow[];
+  siblings?: SiblingSummary[];
+}) {
+  const scopeAllows = (activity?: string | null) => {
+    if (!claim.reversible_scope || claim.reversible_scope === "all_ports") return true;
+    if (claim.reversible_scope === "load_only") return activity === "load";
+    if (claim.reversible_scope === "discharge_only") return activity === "discharge";
+    return true;
+  };
+
+  const laytimeStart = claim.laytime_start ?? null;
+  const laytimeEnd = claim.laytime_end ?? null;
+  const allPorts = claim.port_calls || [];
+  const scopedPorts = allPorts.filter((pc) => scopeAllows(pc.activity));
+
+  const scopedEvents = events.filter((ev) => {
+    if (!claim.reversible) {
+      if (claim.port_call_id) {
+        return ev.port_call_id === claim.port_call_id || !ev.port_call_id;
+      }
+      return !ev.port_call_id;
+    }
+    const act = ev.port_calls?.activity;
+    if (!act) return true;
+    if (!claim.reversible_scope || claim.reversible_scope === "all_ports") return true;
+    if (claim.reversible_scope === "load_only") return act === "load";
+    if (claim.reversible_scope === "discharge_only") return act === "discharge";
+    return true;
+  });
+
+  const deductionsByPort: Record<string, number> = {};
+  scopedEvents.forEach((ev) => {
+    const key = ev.port_call_id || "unassigned";
+    deductionsByPort[key] = (deductionsByPort[key] || 0) + (ev.time_used || 0);
+  });
+  const totalDeductionsAll = Object.values(deductionsByPort).reduce((a, b) => a + (b || 0), 0);
+
+  const baseSpanHours = (() => {
+    if (laytimeStart && laytimeEnd) {
+      const start = new Date(laytimeStart).getTime();
+      const end = new Date(laytimeEnd).getTime();
+      if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
+        return (end - start) / 3600000;
+      }
+    }
+    return 0;
+  })();
+
+  const scopedSiblings = (siblings || []).filter((s) => scopeAllows(s.activity));
+  const pooledSelection = (() => {
+    if (!claim.reversible) return [];
+    const persisted = Array.isArray(claim.reversible_pool_ids) ? claim.reversible_pool_ids : [];
+    const selectedIds = new Set<string>([claim.id, ...persisted]);
+    return scopedSiblings.filter((s) => selectedIds.has(s.claim_id));
+  })();
+  const effectiveSiblings = claim.reversible && pooledSelection.length > 0 ? pooledSelection : scopedSiblings;
+
+  const fallbackAllowed = (() => {
+    const cargoQty = claim.voyages?.cargo_quantity || 0;
+    if (!claim.load_discharge_rate || claim.load_discharge_rate <= 0) return 0;
+    if (claim.load_discharge_rate_unit === "per_hour") return cargoQty / (claim.load_discharge_rate || 1);
+    if (claim.load_discharge_rate_unit === "fixed_duration") return claim.fixed_rate_duration_hours || 0;
+    return (cargoQty / (claim.load_discharge_rate || 1)) * 24;
+  })();
+
+  const primaryPort = claim.port_call_id
+    ? allPorts.find((p) => p.id === claim.port_call_id)
+    : allPorts[0];
+
+  const totalAllowed = claim.reversible
+    ? (effectiveSiblings.length > 0
+        ? Math.max(effectiveSiblings.reduce((acc, s) => acc + (s.allowed || 0), 0), 0)
+        : fallbackAllowed)
+    : primaryPort && primaryPort.allowed_hours !== null && primaryPort.allowed_hours !== undefined
+    ? Number(primaryPort.allowed_hours)
+    : fallbackAllowed;
+
+  const fallbackUsed = (() => {
+    if (baseSpanHours > 0) {
+      return Math.max(baseSpanHours - totalDeductionsAll, 0);
+    }
+    return totalDeductionsAll;
+  })();
+
+  const onceOnDemurrage = baseSpanHours > 0 && totalAllowed !== null && totalAllowed >= 0 && baseSpanHours > totalAllowed;
+  const usedWithRule = onceOnDemurrage ? baseSpanHours : fallbackUsed;
+
+  const totalUsed = claim.reversible
+    ? (effectiveSiblings.length > 0
+        ? Math.max(effectiveSiblings.reduce((acc, s) => acc + (s.used || 0), 0), 0)
+        : usedWithRule)
+    : usedWithRule;
+
+  const timeOver = totalAllowed - totalUsed;
+
+  const demRate = claim.demurrage_rate || 0;
+  const despatchRate =
+    claim.despatch_type === "percent"
+      ? demRate * ((claim.despatch_rate_value || 0) / 100)
+      : claim.despatch_rate_value || 0;
+
+  const demurrage =
+    timeOver !== null && timeOver < 0 ? Math.abs(timeOver) * (demRate / 24) : 0;
+  const despatch =
+    timeOver !== null && timeOver > 0 ? timeOver * (despatchRate / 24) : 0;
+
+  const breakdown = (() => {
+    if (!claim.reversible) {
+      return (claim.port_calls || []).map((pc) => {
+        const used = scopedEvents
+          .filter((ev) => !ev.port_call_id || ev.port_call_id === pc.id)
+          .reduce((sum, ev) => sum + (ev.time_used || 0), 0);
+        const allowed = pc.allowed_hours !== null && pc.allowed_hours !== undefined ? Number(pc.allowed_hours) : null;
+        const overUnder = allowed !== null ? (allowed || 0) - used : null;
+        return {
+          id: pc.id,
+          label: pc.port_name || "Port",
+          activity: pc.activity || "",
+          allowed,
+          used,
+          deductions: used,
+          base: baseSpanHours,
+          overUnder,
+          inScope: true,
+          note: undefined as string | undefined,
+        };
+      });
+    }
+
+    const pooledPortIds = new Set(
+      effectiveSiblings
+        .map((s) => s.port_call_id)
+        .filter((id): id is string => !!id),
+    );
+    const ordered = scopedPorts
+      .filter((pc) => pooledPortIds.size === 0 || pooledPortIds.has(pc.id))
+      .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+
+    const rows = ordered.map((pc) => {
+      const sibling =
+        scopedSiblings.find((s) => s.claim_id === claim.id && s.port_call_id === pc.id) ||
+        scopedSiblings.find((s) => s.port_call_id === pc.id) ||
+        scopedSiblings.find((s) => !s.port_call_id && (!s.activity || s.activity === pc.activity));
+      if (!sibling) {
+        return {
+          id: pc.id,
+          label: pc.port_name || "Port",
+          activity: pc.activity || "",
+          allowed: null as number | null,
+          base: 0,
+          deductions: 0,
+          used: 0,
+          inScope: true,
+          overUnder: null as number | null,
+          note: "Claim not created yet",
+        };
+      }
+      const overUnder =
+        sibling.allowed !== null && sibling.allowed !== undefined
+          ? (sibling.allowed || 0) - (sibling.used || 0)
+          : null;
+
+      return {
+        id: pc.id,
+        label: pc.port_name || "Port",
+        activity: pc.activity || "",
+        allowed: sibling.allowed,
+        base: sibling.base_hours,
+        deductions: sibling.deductions,
+        used: sibling.used,
+        inScope: true,
+        overUnder,
+        note: undefined as string | undefined,
+      };
+    });
+
+    if (deductionsByPort["unassigned"]) {
+      rows.push({
+        id: "unassigned",
+        label: "Unassigned events",
+        activity: "",
+        allowed: null,
+        base: 0,
+        deductions: deductionsByPort["unassigned"],
+        used: deductionsByPort["unassigned"],
+        inScope: true,
+        overUnder: null,
+        note: undefined,
+      });
+    }
+    return rows;
+  })();
+
+  return {
+    totalAllowed,
+    totalUsed,
+    timeOver,
+    onceOnDemurrage,
+    demurrage,
+    despatch,
+    scopedEvents,
+    breakdown,
+    baseSpanHours,
+    totalDeductionsAll,
+    fallbackAllowed,
+  };
 }
 
 function Summary({
@@ -729,6 +949,336 @@ function Summary({
   );
 }
 
+function StatementView({
+  claim,
+  events,
+  attachments,
+  audit,
+  timeFormat,
+  siblings,
+}: {
+  claim: Claim;
+  events: EventRow[];
+  attachments: Attachment[];
+  audit: AuditRow[];
+  timeFormat: TimeFormat;
+  siblings?: SiblingSummary[];
+}) {
+  const snapshot = buildStatementSnapshot({ claim, events, siblings });
+  const sortedEvents = [...snapshot.scopedEvents].sort(
+    (a, b) => new Date(a.from_datetime).getTime() - new Date(b.from_datetime).getTime()
+  );
+  const sofFiles = attachments.filter((a) => a.attachment_type?.toLowerCase() === "sof");
+  const norFiles = attachments.filter((a) => a.attachment_type?.toLowerCase() === "nor");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs text-slate-500">Statement view</p>
+          <h2 className="text-2xl font-semibold text-slate-900">Laytime Statement</h2>
+          <p className="text-xs text-slate-600">
+            {claim.claim_reference} · {claim.port_name || "Port"} · {claim.operation_type || "operation"}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline">Save Draft</Button>
+          <Button size="sm" variant="outline">Mark Final</Button>
+          <Button size="sm">Export PDF</Button>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-4 gap-3">
+        <div className="p-4 rounded-xl border border-slate-100 bg-gradient-to-br from-slate-50 to-white shadow-sm">
+          <p className="text-xs font-semibold text-slate-600">Allowed</p>
+          <p className="text-2xl font-bold text-slate-900">{formatHours(snapshot.totalAllowed, timeFormat)}</p>
+          <p className="text-[11px] text-slate-500">Basis: port call allowed or rate</p>
+        </div>
+        <div className="p-4 rounded-xl border border-slate-100 bg-gradient-to-br from-blue-50 to-white shadow-sm">
+          <p className="text-xs font-semibold text-blue-700">Used</p>
+          <p className="text-2xl font-bold text-slate-900">{formatHours(snapshot.totalUsed, timeFormat)}</p>
+          <p className="text-[11px] text-blue-700">
+            Includes once-on-demurrage rule {snapshot.onceOnDemurrage ? "(active)" : "(inactive)"}
+          </p>
+        </div>
+        <div className="p-4 rounded-xl border border-slate-100 bg-gradient-to-br from-amber-50 to-white shadow-sm">
+          <p className="text-xs font-semibold text-amber-700">Over / Under</p>
+          <p
+            className={`text-2xl font-bold ${
+              snapshot.timeOver !== null
+                ? snapshot.timeOver >= 0
+                  ? "text-emerald-700"
+                  : "text-rose-700"
+                : "text-slate-900"
+            }`}
+          >
+            {snapshot.timeOver !== null ? formatHours(snapshot.timeOver, timeFormat) : "—"}
+          </p>
+          <p className="text-[11px] text-amber-700">
+            {snapshot.timeOver > 0 ? "Despatch candidate" : snapshot.timeOver < 0 ? "Demurrage candidate" : "Balanced"}
+          </p>
+        </div>
+        <div className="p-4 rounded-xl border border-slate-100 bg-gradient-to-br from-emerald-50 to-white shadow-sm">
+          <p className="text-xs font-semibold text-emerald-700">Amounts</p>
+          <p className="text-sm text-slate-900">
+            Demurrage {currency(snapshot.demurrage, claim.demurrage_currency || "USD")}
+          </p>
+          <p className="text-sm text-slate-900">
+            Despatch {currency(snapshot.despatch, claim.despatch_currency || claim.demurrage_currency || "USD")}
+          </p>
+          <p className="text-[11px] text-slate-500">Rates: dem {currency(claim.demurrage_rate || 0, claim.demurrage_currency || "USD")} / day</p>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-3">
+        <div className="p-4 rounded-xl border border-slate-100 bg-white shadow-sm space-y-1">
+          <p className="text-xs font-semibold text-slate-600">Voyage & port</p>
+          <p className="text-sm text-slate-900">{claim.port_name || "Port not set"}</p>
+          <p className="text-xs text-slate-600">Activity: {claim.operation_type || claim.port_calls?.[0]?.activity || "—"}</p>
+          <p className="text-xs text-slate-600">Reversible: {claim.reversible ? `Yes (${claim.reversible_scope || "all ports"})` : "No"}</p>
+        </div>
+        <div className="p-4 rounded-xl border border-slate-100 bg-white shadow-sm space-y-1">
+          <p className="text-xs font-semibold text-slate-600">Terms</p>
+          <p className="text-sm text-slate-900">Term: {claim.terms?.name || "Not set"}</p>
+          <p className="text-xs text-slate-600">Allowed basis: {snapshot.fallbackAllowed > 0 ? "Cargo/rate fallback" : "Port call allowed hours"}</p>
+          <p className="text-xs text-slate-600">Laytime span: {formatHours(snapshot.baseSpanHours, timeFormat)}</p>
+        </div>
+        <div className="p-4 rounded-xl border border-slate-100 bg-white shadow-sm space-y-1">
+          <p className="text-xs font-semibold text-slate-600">Parties & cargo</p>
+          <p className="text-sm text-slate-900">
+            Cargo: {claim.voyages?.cargo_names?.name || "—"} · Qty {claim.voyages?.cargo_quantity || "—"}
+          </p>
+          <p className="text-xs text-slate-600">Rates: Despatch {claim.despatch_type === "percent" ? `${claim.despatch_rate_value || 0}% of demurrage` : currency(claim.despatch_rate_value || 0, claim.despatch_currency || claim.demurrage_currency || "USD")}</p>
+          <p className="text-xs text-slate-600">QC: {claim.qc_status || "—"}</p>
+        </div>
+      </div>
+
+      <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Events & counting</p>
+            <p className="text-xs text-slate-500">Chronological SOF/laytime events with counted minutes.</p>
+          </div>
+          <p className="text-xs text-slate-500">{sortedEvents.length} entries</p>
+        </div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>Event</TableHead>
+                <TableHead>Port</TableHead>
+                <TableHead>From</TableHead>
+                <TableHead>To</TableHead>
+                <TableHead>Rate</TableHead>
+                <TableHead>Counted</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedEvents.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-sm text-slate-500 py-6">
+                    No events yet. Add SOF events in the workspace tab.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                sortedEvents.map((ev, idx) => (
+                  <TableRow key={ev.id}>
+                    <TableCell className="text-xs text-slate-500">{idx + 1}</TableCell>
+                    <TableCell className="font-semibold text-slate-800">{ev.deduction_name}</TableCell>
+                    <TableCell className="text-sm text-slate-700">
+                      {ev.port_calls?.port_name || "—"} {ev.port_calls?.activity ? `(${ev.port_calls.activity})` : ""}
+                    </TableCell>
+                    <TableCell className="text-sm text-slate-700">{formatDate(ev.from_datetime)}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{formatDate(ev.to_datetime)}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{ev.rate_of_calculation}%</TableCell>
+                    <TableCell className="text-sm text-slate-900">{formatHours(ev.time_used || 0, timeFormat)}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      {snapshot.breakdown.length > 0 && (
+        <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-slate-800">Per-port breakdown</p>
+            <p className="text-xs text-slate-500">Allowed vs used, over/under, scope aware.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-3">
+            {snapshot.breakdown.map((row) => {
+              const over = row.overUnder !== null ? row.overUnder : row.allowed !== null && row.allowed !== undefined ? (row.allowed || 0) - (row.used || 0) : null;
+              return (
+                <div key={row.id} className="p-3 rounded-lg border border-slate-100 bg-slate-50">
+                  <p className="font-semibold text-slate-900">
+                    {row.label} {row.activity ? `(${row.activity})` : ""} {!row.inScope ? "• out of scope" : ""}
+                  </p>
+                  <p className="text-xs text-slate-600">Allowed: {row.allowed !== null && row.allowed !== undefined ? formatHours(row.allowed, timeFormat) : "—"}</p>
+                  <p className="text-xs text-slate-600">Used: {formatHours(row.used || 0, timeFormat)}</p>
+                  <p className={`text-xs font-semibold ${over !== null ? (over >= 0 ? "text-emerald-700" : "text-rose-700") : "text-slate-600"}`}>
+                    Over/Under: {over !== null ? formatHours(over, timeFormat) : "—"}
+                  </p>
+                  {row.note && <p className="text-[11px] text-slate-500">{row.note}</p>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-2 gap-3">
+        <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm space-y-2">
+          <p className="text-sm font-semibold text-slate-800">Attachments</p>
+          <p className="text-xs text-slate-500">NOR and SOF files will accompany the statement export.</p>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-700">SOF files</p>
+            {sofFiles.length === 0 ? (
+              <p className="text-xs text-slate-500">No SOF uploads yet.</p>
+            ) : (
+              <ul className="text-sm text-slate-700 list-disc ml-4 space-y-1">
+                {sofFiles.map((f) => (
+                  <li key={f.id}>
+                    <a className="text-ocean-700" href={f.file_url} target="_blank" rel="noreferrer">
+                      {f.filename}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-700">NOR files</p>
+            {norFiles.length === 0 ? (
+              <p className="text-xs text-slate-500">No NOR uploads yet.</p>
+            ) : (
+              <ul className="text-sm text-slate-700 list-disc ml-4 space-y-1">
+                {norFiles.map((f) => (
+                  <li key={f.id}>
+                    <a className="text-ocean-700" href={f.file_url} target="_blank" rel="noreferrer">
+                      {f.filename}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm space-y-2">
+          <p className="text-sm font-semibold text-slate-800">Audit highlights</p>
+          {audit.length === 0 ? (
+            <p className="text-xs text-slate-500">No audit entries yet.</p>
+          ) : (
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {audit.slice(0, 6).map((a) => (
+                <div key={a.id} className="text-xs text-slate-600 border-b pb-2">
+                  <p className="font-semibold text-slate-800">{a.action.toUpperCase()} · {formatDate(a.created_at)}</p>
+                  <p className="break-words text-slate-500">{a.data?.deduction_name || ""}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {audit.length > 6 && <p className="text-[11px] text-slate-500">+{audit.length - 6} more</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SofExtractorTab({
+  events,
+  attachments,
+  timeFormat,
+}: {
+  events: EventRow[];
+  attachments: Attachment[];
+  timeFormat: TimeFormat;
+}) {
+  const sofFiles = attachments.filter((a) => a.attachment_type?.toLowerCase() === "sof");
+  const sortedEvents = [...events].sort(
+    (a, b) => new Date(a.from_datetime).getTime() - new Date(b.from_datetime).getTime()
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs text-slate-500">SOF extraction</p>
+          <h2 className="text-2xl font-semibold text-slate-900">Statement of Facts</h2>
+          <p className="text-xs text-slate-600">Upload SOF, extract events, and reconcile with laytime.</p>
+        </div>
+        <Button size="sm">Launch extractor</Button>
+      </div>
+
+      <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm space-y-2">
+        <p className="text-sm font-semibold text-slate-800">SOF uploads</p>
+        {sofFiles.length === 0 ? (
+          <p className="text-xs text-slate-500">No SOF uploads yet. Add files from the workspace tab.</p>
+        ) : (
+          <ul className="text-sm text-slate-700 list-disc ml-4 space-y-1">
+            {sofFiles.map((f) => (
+              <li key={f.id}>
+                <a className="text-ocean-700" href={f.file_url} target="_blank" rel="noreferrer">
+                  {f.filename}
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <CalendarIcon className="w-4 h-4 text-slate-500" />
+          <p className="text-sm font-semibold text-slate-800">SOF timeline</p>
+        </div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>Event</TableHead>
+                <TableHead>Port</TableHead>
+                <TableHead>From</TableHead>
+                <TableHead>To</TableHead>
+                <TableHead>Rate (%)</TableHead>
+                <TableHead>Counted</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedEvents.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-sm text-slate-500 py-6">
+                    No events yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                sortedEvents.map((ev, idx) => (
+                  <TableRow key={ev.id}>
+                    <TableCell className="text-xs text-slate-500">{idx + 1}</TableCell>
+                    <TableCell className="font-semibold text-slate-800">{ev.deduction_name}</TableCell>
+                    <TableCell className="text-sm text-slate-700">
+                      {ev.port_calls?.port_name || "—"} {ev.port_calls?.activity ? `(${ev.port_calls.activity})` : ""}
+                    </TableCell>
+                    <TableCell className="text-sm text-slate-700">{formatDate(ev.from_datetime)}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{formatDate(ev.to_datetime)}</TableCell>
+                    <TableCell className="text-sm text-slate-700">{ev.rate_of_calculation}%</TableCell>
+                    <TableCell className="text-sm text-slate-900">{formatHours(ev.time_used || 0, timeFormat)}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+        <p className="text-[11px] text-slate-500 mt-2">
+          Extraction will map SOF rows into laytime events and flag mismatches for review.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function CalculationPage({ params }: { params: { claimId: string } }) {
   const router = useRouter();
   const [claim, setClaim] = useState<Claim | null>(null);
@@ -754,6 +1304,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   const [timeFormat, setTimeFormat] = useState<TimeFormat>("dhms");
   const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null);
   const [quickEditOpen, setQuickEditOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"workspace" | "statement" | "sof">("workspace");
 
   useEffect(() => {
     async function load() {
@@ -1109,6 +1660,14 @@ export default function CalculationPage({ params }: { params: { claimId: string 
         </div>
       </div>
 
+      <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="workspace">Workspace</TabsTrigger>
+          <TabsTrigger value="statement">Statement</TabsTrigger>
+          <TabsTrigger value="sof">SOF</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="workspace" className="space-y-6">
       {claim.reversible && claim.reversible_scope && claim.reversible_scope !== "all_ports" && (
         <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
           Reversible scope is limited to: {claim.reversible_scope.replace("_", " ")}. Ensure events/ports match this scope when interpreting results.
@@ -1710,6 +2269,23 @@ export default function CalculationPage({ params }: { params: { claimId: string 
           </div>
         </div>
       </div>
+        </TabsContent>
+
+        <TabsContent value="statement">
+          <StatementView
+            claim={{ ...claim, ...claimForm } as Claim}
+            events={enhancedEvents}
+            attachments={attachments}
+            audit={audit}
+            timeFormat={timeFormat}
+            siblings={siblings}
+          />
+        </TabsContent>
+
+        <TabsContent value="sof">
+          <SofExtractorTab events={enhancedEvents} attachments={attachments} timeFormat={timeFormat} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
