@@ -115,7 +115,8 @@ export async function POST(req: Request, { params }: { params: { claimId: string
     }
   } catch (notifyErr) {
     console.error("Attachment notification failed", notifyErr);
-    notifyMeta = { ok: false, error: notifyErr?.message || "notify failed" };
+    const errMsg = typeof notifyErr === "object" && notifyErr && "message" in notifyErr ? (notifyErr as any).message : "notify failed";
+    notifyMeta = { ok: false, error: errMsg };
   }
 
   return NextResponse.json({ attachment: data }, { status: 201 });
