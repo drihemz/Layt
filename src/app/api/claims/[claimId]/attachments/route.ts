@@ -93,20 +93,29 @@ export async function POST(req: Request, { params }: { params: { claimId: string
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Notify assigned reviewer if someone else uploaded
+  // Notify assigned reviewer
+  let notifyMeta: { ok: boolean; error?: string } | null = null;
   try {
-    if (claim.qc_reviewer_id && claim.qc_reviewer_id !== session.user.id) {
-      await supabase.from("notifications").insert({
-        user_id: claim.qc_reviewer_id,
-        tenant_id: claim.tenant_id,
-        claim_id: claim.id,
-        title: "New attachment uploaded",
-        body: `Claim ${claim.claim_reference || ""} has a new ${attachment_type.toUpperCase()} attachment (${file.name}).`,
-        level: "info",
-      });
+    if (claim.qc_reviewer_id) {
+      const doInsert = async (withClaim: boolean) =>
+        supabase.from("notifications").insert({
+          user_id: claim.qc_reviewer_id as string,
+          tenant_id: claim.tenant_id,
+          claim_id: withClaim ? claim.id : null,
+          title: "New attachment uploaded",
+          body: `Claim ${claim.claim_reference || ""} has a new ${attachment_type.toUpperCase()} attachment (${file.name}).`,
+          level: "info",
+        });
+      let { error: nErr } = await doInsert(true);
+      if (nErr && (nErr as any).code === "42703") {
+        const retry = await doInsert(false);
+        nErr = retry.error;
+      }
+      notifyMeta = nErr ? { ok: false, error: nErr.message } : { ok: true };
     }
   } catch (notifyErr) {
     console.error("Attachment notification failed", notifyErr);
+    notifyMeta = { ok: false, error: notifyErr?.message || "notify failed" };
   }
 
   return NextResponse.json({ attachment: data }, { status: 201 });

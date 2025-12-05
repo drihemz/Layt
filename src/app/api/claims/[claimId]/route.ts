@@ -3,6 +3,40 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 
+type NotifyResult = { ok: boolean; error?: string };
+
+async function insertNotification(
+  supabase: ReturnType<typeof createServerClient>,
+  params: { user_id: string; tenant_id?: string | null; claim_id?: string | null; title: string; body: string; level?: string }
+): Promise<NotifyResult> {
+  try {
+    const doInsert = async (withClaim: boolean) =>
+      supabase.from("notifications").insert({
+        user_id: params.user_id,
+        tenant_id: params.tenant_id || null,
+        claim_id: withClaim ? params.claim_id || null : null,
+        title: params.title,
+        body: params.body,
+        level: params.level || "info",
+      });
+
+    let { error } = await doInsert(true);
+    if (error && (error as any).code === "42703") {
+      // Missing claim_id column in schema cache; retry without it so we don't silently drop notifications
+      const retry = await doInsert(false);
+      error = retry.error;
+    }
+    if (error) {
+      console.error("Notification insert failed", error);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Notification insert threw", err);
+    return { ok: false, error: err?.message || "unknown" };
+  }
+}
+
 const updatableFields = [
   "claim_status",
   "operation_type",
@@ -87,7 +121,7 @@ export async function PUT(
 
   const { data: existing, error: fetchError } = await supabase
     .from("claims")
-    .select("id, tenant_id, voyage_id")
+    .select("id, tenant_id, voyage_id, qc_reviewer_id, claim_status, qc_status, claim_reference")
     .eq("id", params.claimId)
     .single();
 
@@ -220,30 +254,43 @@ export async function PUT(
     }
 
     // Fire notifications for QC reviewer when assigned or status changes
-    try {
-      const newReviewer = payload.qc_reviewer_id || existingClaim.qc_reviewer_id;
-      const reviewerChanged = payload.qc_reviewer_id && payload.qc_reviewer_id !== existingClaim.qc_reviewer_id;
-      const statusChanged =
-        payload.claim_status && payload.claim_status !== existingClaim.claim_status;
+    const newReviewer = payload.qc_reviewer_id || existingClaim.qc_reviewer_id;
+    const reviewerChanged =
+      payload.qc_reviewer_id && payload.qc_reviewer_id !== existingClaim.qc_reviewer_id;
+    const statusChanged =
+      payload.claim_status && payload.claim_status !== existingClaim.claim_status;
 
-      if ((reviewerChanged || statusChanged) && newReviewer) {
-        const title = reviewerChanged
-          ? `Assigned to ${existingClaim.claim_reference || "claim"}`
-          : `Status updated: ${payload.claim_status}`;
-        const body = reviewerChanged
-          ? `You were assigned as QC reviewer for ${existingClaim.claim_reference || "this claim"}.`
-          : `Claim ${existingClaim.claim_reference || ""} moved to ${payload.claim_status}.`;
-        await supabase.from("notifications").insert({
-          user_id: newReviewer,
-          tenant_id: existingClaim.tenant_id,
-          title,
-          body,
-          level: reviewerChanged ? "info" : "success",
-          claim_id: existingClaim.id,
-        });
-      }
-    } catch (notifyError) {
-      console.error("Notification insert failed", notifyError);
+    let notifyMeta: NotifyResult | null = null;
+
+    if ((reviewerChanged || statusChanged) && newReviewer) {
+      const title = reviewerChanged
+        ? `Assigned to ${existingClaim.claim_reference || "claim"}`
+        : `Status updated: ${payload.claim_status}`;
+      const body = reviewerChanged
+        ? `You were assigned as QC reviewer for ${existingClaim.claim_reference || "this claim"}.`
+        : `Claim ${existingClaim.claim_reference || ""} moved to ${payload.claim_status}.`;
+      notifyMeta = await insertNotification(supabase, {
+        user_id: newReviewer,
+        tenant_id: existingClaim.tenant_id,
+        claim_id: existingClaim.id,
+        title,
+        body,
+        level: reviewerChanged ? "info" : "success",
+      });
+    }
+
+    // Always notify on explicit status change payload when a reviewer exists (even if value matches), to avoid silent misses.
+    if (payload.claim_status !== undefined && newReviewer) {
+      const title = `Status update posted`;
+      const body = `Claim ${existingClaim.claim_reference || ""} status set to ${payload.claim_status}.`;
+      notifyMeta = await insertNotification(supabase, {
+        user_id: newReviewer,
+        tenant_id: existingClaim.tenant_id,
+        claim_id: existingClaim.id,
+        title,
+        body,
+        level: "info",
+      });
     }
 
     return NextResponse.json({

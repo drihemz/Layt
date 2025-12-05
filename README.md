@@ -93,6 +93,10 @@ npm run dev
 - Notifications: notifications table/policies (`022_notifications`, `023_notifications_policies`, `024_notifications_policy_update`), API `/api/notifications`, notification bell with per-item mark-read and claim deep links; QC, reviewer changes, and comments trigger notifications.
 - Claims UX: status/reviewer chips, filters; voyage/port-call views show chips; non-reversible claims hide per-port breakdown; dashboard adds “My Queue” (assigned reviewer) and unread count.
 - Attachments: uploads now notify assigned reviewer.
+- Laytime foundations: added migration `025_laytime_foundations` for cargo, charter parties, laytime profiles, laytime calculations, port activities/deductions, cargo-port laytime rows with RLS; scaffolded `src/lib/laytime-engine` for a pure TypeScript calculation module.
+- Laytime APIs scaffolded: `/api/laytime-calculations` (list/create), `/api/laytime-calculations/[calcId]` (fetch calc + related data), `/api/laytime-calculations/[calcId]/recalculate` (calls engine stub).
+- Laytime test UI (sandbox) at `/laytime` and `/laytime/[calcId]` is disabled by default; set `NEXT_PUBLIC_ENABLE_LAYTIME_TEST=true` to access. Sandbox is isolated from live calculator.
+- Sandbox status: opt-in only; creating/recalculating sandbox laytime calcs will not touch the live calculator or live claim data. Turn the env flag off to hide all sandbox UI/APIs after testing.
 - Future roadmap ideas (not yet implemented): deeper QC approvals/validation, external sharing/third-party review, versioning/diffs, SOF parsing + master SOF data, contract-driven auto-calcs, AI assistance, and GDPR-focused audit/retention tooling.
 
 ## Pending / Planned (summary)

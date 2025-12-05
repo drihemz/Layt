@@ -89,6 +89,8 @@ export function NotificationBell() {
     } finally {
       setNotifications((prev) => prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
       setOpen(false);
+      // pull a fresh page to sync with server
+      loadPage(0);
     }
   };
 

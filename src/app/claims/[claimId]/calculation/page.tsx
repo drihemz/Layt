@@ -354,18 +354,21 @@ function Summary({
     return true;
   };
 
+  const laytimeStart = claim.laytime_start ?? null;
+  const laytimeEnd = claim.laytime_end ?? null;
   const allPorts = claim.port_calls || [];
   // Ports in scope for reversible setting (used for totals/allowance)
   const scopedPorts = allPorts.filter((pc) => scopeAllows(pc.activity));
   const portsForTotals = scopedPorts.length > 0 ? scopedPorts : allPorts;
 
   const scopedEvents = events.filter((ev) => {
-    // For non-reversible, only keep events tied to this claim's port_call (if set); otherwise all.
+    // Non-reversible: only count events on this claim's port call (and allow untagged).
     if (!claim.reversible) {
       if (claim.port_call_id) {
         return ev.port_call_id === claim.port_call_id || !ev.port_call_id;
       }
-      return true;
+      // If no port_call_id is set on the claim, keep untagged events only.
+      return !ev.port_call_id;
     }
     const act = ev.port_calls?.activity;
     if (!act) return true; // keep untagged events
@@ -383,9 +386,9 @@ function Summary({
   const totalDeductionsAll = Object.values(deductionsByPort).reduce((a, b) => a + (b || 0), 0);
 
   const baseSpanHours = (() => {
-    if (claim.laytime_start && claim.laytime_end) {
-      const start = new Date(claim.laytime_start).getTime();
-      const end = new Date(claim.laytime_end).getTime();
+    if (laytimeStart && laytimeEnd) {
+      const start = new Date(laytimeStart).getTime();
+      const end = new Date(laytimeEnd).getTime();
       if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
         return (end - start) / 3600000;
       }
@@ -526,11 +529,15 @@ function Summary({
     return totalDeductionsAll;
   })();
 
+  // Once on demurrage rule: if the laytime span already exceeds allowed, stop pausing time (all remaining counts)
+  const onceOnDemurrage = baseSpanHours > 0 && totalAllowed !== null && totalAllowed >= 0 && baseSpanHours > totalAllowed;
+  const usedWithRule = onceOnDemurrage ? baseSpanHours : fallbackUsed;
+
   const totalUsed = claim.reversible
     ? (effectiveSiblings.length > 0
         ? Math.max(effectiveSiblings.reduce((acc, s) => acc + (s.used || 0), 0), 0)
-        : fallbackUsed)
-    : fallbackUsed;
+        : usedWithRule)
+    : usedWithRule;
 
   const timeOver = totalAllowed - totalUsed;
 
@@ -549,7 +556,15 @@ function Summary({
   const breakdown = (() => {
     if (!claim.reversible) return [];
 
-    const ordered = scopedPorts.slice().sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    // Only show ports that belong to pooled claims (or the current claim), to avoid unrelated ports leaking in
+    const pooledPortIds = new Set(
+      effectiveSiblings
+        .map((s) => s.port_call_id)
+        .filter((id): id is string => !!id),
+    );
+    const ordered = scopedPorts
+      .filter((pc) => pooledPortIds.size === 0 || pooledPortIds.has(pc.id))
+      .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
 
     const rows = ordered.map((pc) => {
       const sibling =
@@ -659,6 +674,11 @@ function Summary({
           >
             {timeOver !== null ? formatHours(timeOver, timeFormat) : "—"}
           </p>
+          {onceOnDemurrage && (
+            <span className="mt-1 inline-flex text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+              Once on demurrage active
+            </span>
+          )}
         </div>
         <div className="p-4 bg-gradient-to-br from-[#17694c14] via-white to-white border border-[#1a8c642b] rounded-xl shadow-sm">
           <p className="text-sm text-[#17694c] font-semibold">Result</p>
@@ -673,6 +693,11 @@ function Summary({
           </p>
         </div>
       </div>
+      <p className="text-xs text-slate-600">
+        {onceOnDemurrage
+          ? "Once-on-demurrage active: laytime span already exceeds allowed, so remaining time keeps counting (later deductions are not pausing time)."
+          : "Rule: once on demurrage, remaining time continues to count; deductions after overage are not paused in this view."}
+      </p>
 
       {breakdown.length > 0 && (
         <div className="p-4 border border-slate-200 rounded-xl bg-white">
@@ -728,6 +753,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   const [editingEvent, setEditingEvent] = useState<EventRow | null>(null);
   const [timeFormat, setTimeFormat] = useState<TimeFormat>("dhms");
   const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null);
+  const [quickEditOpen, setQuickEditOpen] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -1028,6 +1054,18 @@ export default function CalculationPage({ params }: { params: { claimId: string 
     );
   }
 
+  const laytimeStart = claimForm.laytime_start ?? claim?.laytime_start ?? null;
+  const laytimeEnd = claimForm.laytime_end ?? claim?.laytime_end ?? null;
+  const laytimeSpanHours = (() => {
+    if (laytimeStart && laytimeEnd) {
+      const s = new Date(laytimeStart).getTime();
+      const e = new Date(laytimeEnd).getTime();
+      if (!Number.isNaN(s) && !Number.isNaN(e) && e > s) return (e - s) / 3600000;
+    }
+    return 0;
+  })();
+  const missingLaytimeSpan = !laytimeStart || !laytimeEnd || laytimeSpanHours <= 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -1074,6 +1112,75 @@ export default function CalculationPage({ params }: { params: { claimId: string 
       {claim.reversible && claim.reversible_scope && claim.reversible_scope !== "all_ports" && (
         <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
           Reversible scope is limited to: {claim.reversible_scope.replace("_", " ")}. Ensure events/ports match this scope when interpreting results.
+        </div>
+      )}
+
+      {(missingLaytimeSpan || (!claim.reversible && !claim.port_call_id)) && (
+        <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+          {!laytimeStart || !laytimeEnd
+            ? "Laytime start/end is missing, so totals rely on deductions and any allowed_hours set on the port call."
+            : laytimeSpanHours <= 0
+            ? "Laytime span could not be derived (start/end are invalid or zero). Totals may be approximate."
+            : !claim.reversible && !claim.port_call_id
+            ? "No port call selected for this non-reversible claim; only unassigned events are counted."
+            : null}
+        </div>
+      )}
+      <div className="p-3 border border-slate-200 rounded-lg bg-white flex items-center gap-3">
+        <Button variant="outline" size="sm" onClick={() => setQuickEditOpen((v) => !v)}>
+          {quickEditOpen ? "Close quick edit" : "Quick edit key timings"}
+        </Button>
+        <p className="text-xs text-slate-600">
+          Adjust laytime start/end, NOR, and ops timings quickly; then save to apply.
+        </p>
+      </div>
+      {quickEditOpen && (
+        <div className="p-4 rounded-lg border border-slate-200 bg-slate-50 grid md:grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <Label>Laytime start</Label>
+            <Input
+              type="datetime-local"
+              value={toInputValue(laytimeStart)}
+              onChange={(e) => handleClaimFieldChange("laytime_start", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Laytime end</Label>
+            <Input
+              type="datetime-local"
+              value={toInputValue(laytimeEnd)}
+              onChange={(e) => handleClaimFieldChange("laytime_end", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>NOR tendered</Label>
+            <Input
+              type="datetime-local"
+              value={toInputValue(claimForm.nor_tendered_at ?? claim.nor_tendered_at)}
+              onChange={(e) => handleClaimFieldChange("nor_tendered_at", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Ops start</Label>
+            <Input
+              type="datetime-local"
+              value={toInputValue(claimForm.loading_start_at ?? claim.loading_start_at)}
+              onChange={(e) => handleClaimFieldChange("loading_start_at", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Ops end</Label>
+            <Input
+              type="datetime-local"
+              value={toInputValue(claimForm.loading_end_at ?? claim.loading_end_at)}
+              onChange={(e) => handleClaimFieldChange("loading_end_at", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1 flex items-end">
+            <Button size="sm" onClick={saveClaimDetails} disabled={savingClaim}>
+              {savingClaim ? "Saving…" : "Save timings"}
+            </Button>
+          </div>
         </div>
       )}
 

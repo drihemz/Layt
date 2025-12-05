@@ -5,6 +5,8 @@
 - QC/Comments: Claims store `qc_status`, `qc_reviewer_id`, `qc_notes`; reviewer dropdown loads tenant users; only assigned reviewer/super_admin can change QC fields; claim comments API/UI.
 - Claims UX: Status/reviewer chips and filters on claims list; voyage/port-call views show chips; dashboard has “My Queue” (claims where user is reviewer) and unread notifications; per-port breakdown hidden for non-reversible claims; reversible pooling fixes.
 - Dashboard: Claims-by-status, upcoming port calls, usage vs limits, My Queue + unread badge.
+- Laytime foundations: Migration `025_laytime_foundations` adds cargo, charter parties, laytime profiles, laytime calculations, port activities/deductions, cargo-port laytime rows (with RLS); scaffolded `src/lib/laytime-engine` as a pure TS module (currently stubbed).
+- Laytime APIs scaffolded: `/api/laytime-calculations` (list/create), `/api/laytime-calculations/[calcId]` (fetch calc + related data), `/api/laytime-calculations/[calcId]/recalculate` (engine stub call).
 
 ## Migrations
 - `020_qc_and_comments.sql`: QC fields, `claim_comments`.

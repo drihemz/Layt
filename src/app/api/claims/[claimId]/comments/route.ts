@@ -36,15 +36,22 @@ export async function POST(req: Request, { params }: { params: { claimId: string
       .select("id, claim_reference, qc_reviewer_id, tenant_id")
       .eq("id", params.claimId)
       .maybeSingle();
-    if (claimRow?.qc_reviewer_id && claimRow.qc_reviewer_id !== session.user.id) {
-      await supabase.from("notifications").insert({
-        user_id: claimRow.qc_reviewer_id,
-        tenant_id: claimRow.tenant_id,
-        claim_id: claimRow.id,
-        title: "New comment on claim",
-        body: `Claim ${claimRow.claim_reference || ""} has a new comment.`,
-        level: "info",
-      });
+    if (claimRow?.qc_reviewer_id) {
+      const doInsert = async (withClaim: boolean) =>
+        supabase.from("notifications").insert({
+          user_id: claimRow.qc_reviewer_id as string,
+          tenant_id: claimRow.tenant_id,
+          claim_id: withClaim ? claimRow.id : null,
+          title: "New comment on claim",
+          body: `Claim ${claimRow.claim_reference || ""} has a new comment.`,
+          level: "info",
+        });
+      let { error: nErr } = await doInsert(true);
+      if (nErr && (nErr as any).code === "42703") {
+        const retry = await doInsert(false);
+        nErr = retry.error;
+      }
+      if (nErr) console.error("Comment notification insert failed", nErr);
     }
   } catch (notifyErr) {
     console.error("Comment notification failed", notifyErr);
