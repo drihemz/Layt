@@ -99,6 +99,8 @@ This file tracks the development progress of the Laytime Platform. It is designe
 - [x] Notifications: tables/policies (022/023/024), API `/api/notifications`, notification bell with per-item mark-read and claim deep links; QC assignments/status changes and comments notify the reviewer.
 - [x] Claims UX: status/reviewer chips and filters on claims list; voyage/port-call views show chips; dashboard “My Queue” + unread badge; per-port breakdown hidden for non-reversible claims.
 - [x] Attachments trigger notifications to assigned reviewer.
+- [x] Notifications hardening: ensured `claim_id` column (migration 026); insert fallbacks if schema cache misses; bell shows claim links and refreshes after mark-all-read.
+- [x] Claims calculator: non-reversible events scoped to claim port call with warnings; once-on-demurrage badge; quick edit timings panel; reversible per-port breakdown only shows pooled ports.
 - [x] Laytime foundations scaffolding: migration 025 for cargo/charter_party/laytime_profile/laytime_calculation/port_activity/port_deductions/cargo_port_laytime_rows with RLS; added `src/lib/laytime-engine` stub for pure TS calculation module.
 - [x] Laytime API scaffold: `/api/laytime-calculations` (list/create), `/api/laytime-calculations/[calcId]` (fetch calc + related), `/api/laytime-calculations/[calcId]/recalculate` (engine stub call).
 - [x] Laytime sandbox status: `/laytime` + `/laytime/[id]` and related APIs are gated by `NEXT_PUBLIC_ENABLE_LAYTIME_TEST`. When off (default), sandbox UI/APIs stay hidden and do not affect live claims; when on, you can create/recalc sandbox calcs without touching live data.
