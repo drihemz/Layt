@@ -113,6 +113,12 @@ This file tracks the development progress of the Laytime Platform. It is designe
 - [x] Port-call timeline component with icons/status badges added to voyage and port-call pages.
 - [x] Dashboard includes claims-by-status and upcoming port-call widgets.
 - [x] Claim create form sections regrouped with helper text and validation hints; cargo quantity > 0 enforced on voyage create/edit.
+- [x] SOF extractor tab split into summary/preview/timeline; low-confidence rows filtered server-side via `SOF_CONFIDENCE_FLOOR`, warnings surfaced in UI; added banner for skipped rows.
+- [x] SOF editing UX: timeline scrollable, inline edit of event name/from/to/rate, delete, manual add with page; click row jumps preview page; preview offers open-in-new-tab and add-from-preview form.
+- [x] Signed URLs for attachments: `/api/claims/[claimId]/attachments` signs storage URLs (when `SUPABASE_SERVICE_ROLE_KEY` is set) and surfaces `signed_url` to the SOF preview/links for reliable embedding.
+- [x] Sidebar hover-collapse: main nav now icon-only and expands on hover for more workspace.
+- [x] Sample OCR service (FastAPI) now returns per-line bounding boxes, page/line, confidence, and boxes array for future PDF overlays.
+- [x] pdf.js viewer: client-side pdf.js renderer added for SOF preview with bbox overlays; falls back to iframe when pdf.js is not available. Local assets expected in `public/pdfjs-dist/build/pdf.min.js` and `pdf.worker.min.js`.
 - [ ] Planned: deepen QC workflow (multi-step approvals, audit stamps), external/third-party sharing & validation, versioning/diffs, SOF parser + master SOF data, contract-driven auto-calc, AI assist, GDPR/retention/audit enhancements.
 - [ ] **Voyage Enhancements**
   - [x] Added port_calls table and API (ETA/ETD, activity, status, sequence).
@@ -184,6 +190,15 @@ This file tracks the development progress of the Laytime Platform. It is designe
 - [ ] **Migrations & Policies:**
   - [x] Added migration 008 to extend claims with laytime/demurrage fields and terms with window/public flag; updated terms read policy for public visibility.
   - [x] Added migration 009 for requests table with RLS/policies.
+
+### New SOF Extractor Follow-ups
+- [ ] Persist extracted SOF header + timeline per claim (schema + API) and allow reapply/edit.
+- [ ] Add toggle to show filtered-out low-confidence rows in UI.
+- [ ] Map extracted header fields into claim/port-call (port/vessel/cargo/laycan) with user confirm.
+- [ ] Add per-row accept/reject + manual edit before saving to events.
+- [ ] Save to DB: add “Save to claim events” action to upsert the edited/manual list into `calculation_events`.
+- [ ] PDF overlays: use OCR-provided bounding boxes to highlight extracted text and click-to-add directly from the preview.
+- [ ] pdf.js stability: ensure local pdf.js UMD build is present and loading; remove iframe fallback once confirmed.
 
 ### High Priority Bug Fixes (New)
 

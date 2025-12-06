@@ -1,0 +1,164 @@
+# SOF Extractor (server) snapshot
+
+This mirrors the FastAPI OCR extractor we discussed so we can recall the exact code, Python requirements, and Dockerfile setup.
+
+## `main.py`
+```python
+import io
+import re
+from typing import List, Dict, Tuple
+
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.responses import JSONResponse
+from pdf2image import convert_from_bytes
+from PIL import Image
+import pytesseract
+
+app = FastAPI()
+
+TIME_REGEX = re.compile(r"(\d{1,2}[:\.]\d{2})")
+DATE_REGEX = re.compile(r"(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})")
+
+def parse_line_groups(ocr: Dict) -> List[Dict]:
+    grouped: Dict[Tuple[int, int, int], List[int]] = {}
+    n = len(ocr["text"])
+    for i in range(n):
+        text = ocr["text"][i]
+        if not text or text.strip() == "":
+            continue
+        key = (ocr["block_num"][i], ocr["par_num"][i], ocr["line_num"][i])
+        grouped.setdefault(key, []).append(i)
+
+    lines = []
+    for (b, p, l), idxs in grouped.items():
+        idxs = sorted(idxs)
+        words = []
+        x1 = y1 = 10**9
+        x2 = y2 = -10**9
+        confs = []
+        for i in idxs:
+            words.append(ocr["text"][i])
+            x, y, w, h = ocr["left"][i], ocr["top"][i], ocr["width"][i], ocr["height"][i]
+            x1 = min(x1, x)
+            y1 = min(y1, y)
+            x2 = max(x2, x + w)
+            y2 = max(y2, y + h)
+            try:
+                c = float(ocr["conf"][i])
+                if c >= 0:
+                    confs.append(c)
+            except Exception:
+                pass
+        text = " ".join(words).strip()
+        if not text:
+            continue
+        bbox = {"x": x1, "y": y1, "width": x2 - x1, "height": y2 - y1}
+        avg_conf = sum(confs) / len(confs) if confs else None
+        lines.append(
+            {
+                "text": text,
+                "bbox": bbox,
+                "confidence": avg_conf / 100 if avg_conf is not None else None,
+                "block": b,
+                "paragraph": p,
+                "line": l,
+            }
+        )
+    return lines
+
+def ocr_images(images: List[Image.Image]):
+    events = []
+    boxes = []
+    for page_idx, img in enumerate(images, start=1):
+        data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+        lines = parse_line_groups(data)
+        for line_idx, line in enumerate(lines, start=1):
+            clean = line["text"].strip()
+            if not clean:
+                continue
+            times = TIME_REGEX.findall(clean)
+            dates = DATE_REGEX.findall(clean)
+            start = end = None
+            if len(times) >= 1:
+                start = times[0].replace(".", ":")
+            if len(times) >= 2:
+                end = times[1].replace(".", ":")
+            events.append(
+                {
+                    "event": clean,
+                    "start": start,
+                    "end": end,
+                    "ratePercent": None,
+                    "behavior": None,
+                    "notes": clean,
+                    "page": page_idx,
+                    "line": line_idx,
+                    "confidence": line["confidence"],
+                    "bbox": line["bbox"],
+                }
+            )
+            boxes.append(
+                {
+                    "page": page_idx,
+                    "line": line_idx,
+                    "text": clean,
+                    "bbox": line["bbox"],
+                    "confidence": line["confidence"],
+                }
+            )
+    return events, boxes
+
+@app.post("/extract")
+async def extract(file: UploadFile = File(...)):
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+    try:
+        if file.filename.lower().endswith(".pdf"):
+            images = convert_from_bytes(content, fmt="png")
+        else:
+            images = [Image.open(io.BytesIO(content))]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to load file: {e}") from e
+
+    events, boxes = ocr_images(images)
+    return JSONResponse(
+        {
+            "events": events,
+            "boxes": boxes,
+            "warnings": [],
+            "meta": {"sourcePages": len(images), "durationMs": None},
+        }
+    )
+```
+
+## `requirements.txt`
+```
+fastapi
+uvicorn[standard]
+pdf2image
+pillow
+pytesseract
+```
+
+## `Dockerfile` (sample)
+```Dockerfile
+FROM python:3.11-slim
+
+# System deps: poppler for pdf2image, tesseract for OCR
+RUN apt-get update && apt-get install -y \
+    poppler-utils \
+    tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+Notes:
+- For images, Tesseract is required. For PDFs, `pdf2image` needs poppler.
+- The service responds with events plus per-line `bbox` data so the frontend can draw overlays/highlights.

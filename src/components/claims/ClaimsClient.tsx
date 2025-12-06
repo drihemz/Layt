@@ -78,7 +78,7 @@ export default function ClaimsClient({
   // If super_admin and a default voyage is provided, or only one tenant exists, preselect tenant to enable Create Claim
   useEffect(() => {
     if (!isSuperAdmin) return;
-    const params = new URLSearchParams(searchParams);
+    const params = new URLSearchParams(searchParams || undefined);
     if (!tenantValue && defaultVoyageId) {
       const v = voyages.find((voy) => voy.id === defaultVoyageId && (voy as any).tenant_id);
       if (v && (v as any).tenant_id) {
@@ -105,7 +105,7 @@ export default function ClaimsClient({
   // Clear openCreate param after initial use to avoid reopening
   useEffect(() => {
     if (openCreate) {
-      const params = new URLSearchParams(searchParams);
+      const params = new URLSearchParams(searchParams || undefined);
       params.delete("openCreate");
       router.replace(`${pathname}?${params.toString()}`);
     }
@@ -113,7 +113,7 @@ export default function ClaimsClient({
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
-    const params = new URLSearchParams(searchParams);
+    const params = new URLSearchParams(searchParams || undefined);
     params.set("q", e.target.value);
     router.replace(`${pathname}?${params.toString()}`);
   };
@@ -121,7 +121,7 @@ export default function ClaimsClient({
   const handleTenantChange = (value: string) => {
     const parsed = value === "all" ? "" : value;
     setTenantValue(parsed);
-    const params = new URLSearchParams(searchParams);
+    const params = new URLSearchParams(searchParams || undefined);
     if (parsed) params.set("tenantId", parsed); else params.delete("tenantId");
     router.push(`${pathname}?${params.toString()}`);
   };

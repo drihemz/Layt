@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 
 async function loadClaim(supabase: ReturnType<typeof createServerClient>, claimId: string) {
   const { data, error } = await supabase
@@ -35,13 +36,39 @@ export async function GET(_req: Request, { params }: { params: { claimId: string
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const signer = serviceKey && supabaseUrl ? createClient(supabaseUrl, serviceKey) : null;
+
   const { data, error } = await supabase
     .from("claim_attachments")
     .select("*")
     .eq("claim_id", params.claimId)
     .order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ attachments: data || [] });
+
+  // Optionally sign URLs for private buckets; currently bucket is public, but signing helps iframe reliability.
+  const attachments = await Promise.all(
+    (data || []).map(async (att) => {
+      if (!signer || !att.file_url) return att;
+      // Robust path extraction: look for ".../claim-attachments/<path>"
+      let path: string | null = null;
+      try {
+        const match = att.file_url.match(/claim-attachments\/(.+)$/);
+        if (match && match[1]) {
+          path = decodeURIComponent(match[1]);
+        }
+      } catch {
+        path = null;
+      }
+      if (!path) return att;
+      const { data: signed, error: signErr } = await signer.storage.from(BUCKET).createSignedUrl(path, 60 * 60); // 1 hour
+      if (signErr || !signed?.signedUrl) return att;
+      return { ...att, signed_url: signed.signedUrl };
+    })
+  );
+
+  return NextResponse.json({ attachments });
 }
 
 export async function POST(req: Request, { params }: { params: { claimId: string } }) {

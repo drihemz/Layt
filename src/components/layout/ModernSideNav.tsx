@@ -56,7 +56,7 @@ export function ModernSideNav() {
     : navigation;
 
   return (
-    <div className="w-full flex-none md:w-64 flex h-full flex-col bg-gradient-to-b from-blue-100 via-cyan-100 to-teal-100 text-blue-900 relative overflow-hidden shadow-xl border-r border-blue-200">
+    <div className="group/nav w-full flex-none md:w-16 md:hover:w-64 transition-all duration-200 flex h-full flex-col bg-gradient-to-b from-blue-100 via-cyan-100 to-teal-100 text-blue-900 relative overflow-hidden shadow-xl border-r border-blue-200">
       {/* Background Pattern */}
       <div className="absolute inset-0 wave-pattern opacity-10"></div>
       {/* Animated Background Elements */}
@@ -69,19 +69,19 @@ export function ModernSideNav() {
           <div className="bg-white/80 backdrop-blur rounded-xl p-2.5 shadow-lg border border-blue-200/40">
             <Anchor className="w-6 h-6 text-blue-700" />
           </div>
-          <div>
+          <div className="hidden md:group-hover/nav:block">
             <h1 className="text-lg font-bold tracking-tight text-blue-900">Laytime</h1>
             <p className="text-xs text-blue-500 font-medium">Platform</p>
           </div>
         </div>
-        <div className="hidden md:block">
+        <div className="hidden md:group-hover/nav:block">
           <Waves className="w-5 h-5 text-blue-300" />
         </div>
       </div>
 
       {/* User Info */}
       {session && (
-        <div className="relative z-10 px-6 py-4 border-b border-blue-200/60 bg-white/70 backdrop-blur">
+        <div className="relative z-10 px-6 py-4 border-b border-blue-200/60 bg-white/70 backdrop-blur hidden md:group-hover/nav:block">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-xl bg-blue-200/60 flex items-center justify-center border border-blue-300 shadow-lg">
               <span className="text-sm font-bold text-blue-900">
@@ -101,10 +101,10 @@ export function ModernSideNav() {
       )}
 
       {/* Navigation */}
-      <nav className="relative z-10 flex-1 overflow-y-auto px-4 py-4 space-y-1">
+      <nav className="relative z-10 flex-1 overflow-y-auto px-2 md:px-4 py-4 space-y-1">
         {/* Main Navigation */}
         <div className="mb-2">
-          <p className="px-4 text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">
+          <p className="px-4 text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2 hidden md:group-hover/nav:block">
             Main
           </p>
         </div>
@@ -115,7 +115,7 @@ export function ModernSideNav() {
               key={item.name}
               href={item.href}
               className={cn(
-                "group flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 relative",
+                "group flex items-center space-x-3 px-3 md:px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 relative",
                 isActive
                   ? "bg-white text-blue-900 shadow-lg border border-blue-300"
                   : "text-blue-800 hover:bg-blue-100 hover:text-blue-900"
@@ -125,7 +125,7 @@ export function ModernSideNav() {
                 "w-5 h-5 transition-transform",
                 isActive ? "text-blue-700 scale-110" : "text-blue-500 group-hover:text-blue-700"
               )} />
-              <span className="flex-1">{item.name}</span>
+              <span className="flex-1 hidden md:group-hover/nav:inline">{item.name}</span>
               {isActive && (
                 <ChevronRight className="w-4 h-4 animate-pulse text-blue-700" />
               )}
@@ -140,7 +140,7 @@ export function ModernSideNav() {
         {(isCustomerAdmin || isSuperAdmin) && (
           <>
             <div className="pt-6 pb-2">
-              <p className="px-4 text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">
+              <p className="px-4 text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2 hidden md:group-hover/nav:block">
                 Administration
               </p>
             </div>
@@ -161,7 +161,7 @@ export function ModernSideNav() {
                     "w-5 h-5 transition-transform",
                     isActive ? "text-blue-700 scale-110" : "text-blue-500 group-hover:text-blue-700"
                   )} />
-                  <span className="flex-1">{item.name}</span>
+                  <span className="flex-1 hidden md:group-hover/nav:inline">{item.name}</span>
                   {isActive && (
                     <ChevronRight className="w-4 h-4 animate-pulse text-blue-700" />
                   )}
@@ -178,7 +178,7 @@ export function ModernSideNav() {
         {isSuperAdmin && (
           <>
             <div className="pt-6 pb-2">
-              <p className="px-4 text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">
+              <p className="px-4 text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2 hidden md:group-hover/nav:block">
                 Super Admin
               </p>
             </div>
@@ -199,7 +199,7 @@ export function ModernSideNav() {
                     "w-5 h-5 transition-transform",
                     isActive ? "text-blue-700 scale-110" : "text-blue-500 group-hover:text-blue-700"
                   )} />
-                  <span className="flex-1">{item.name}</span>
+                  <span className="flex-1 hidden md:group-hover/nav:inline">{item.name}</span>
                   {isActive && (
                     <ChevronRight className="w-4 h-4 animate-pulse text-blue-700" />
                   )}
@@ -214,7 +214,7 @@ export function ModernSideNav() {
       </nav>
 
       {/* Logout */}
-      <div className="relative z-10 p-4 border-t border-blue-200/60 bg-white/70 backdrop-blur">
+      <div className="relative z-10 p-4 border-t border-blue-200/60 bg-white/70 backdrop-blur hidden md:group-hover/nav:block">
         <Button
           onClick={() => signOut({ callbackUrl: "/auth/login" })}
           variant="ghost"

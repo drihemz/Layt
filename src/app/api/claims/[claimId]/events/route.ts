@@ -383,3 +383,66 @@ export async function DELETE(
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
+
+// Bulk replace events (used by SOF extractor save)
+export async function PATCH(
+  req: Request,
+  { params }: { params: { claimId: string } }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const supabase = createServerClient();
+  const { claim, error } = await loadClaim(supabase, params.claimId);
+  if (error || !claim) return NextResponse.json({ error: "Claim not found" }, { status: 404 });
+  const claimAny: any = claim;
+  if (session.user.role !== "super_admin" && session.user.tenantId !== claimAny.tenant_id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  try {
+    const body = await req.json();
+    const incoming = Array.isArray(body?.events) ? body.events : [];
+    if (incoming.length === 0) {
+      // Delete all events if none provided
+      await supabase.from("calculation_events").delete().eq("claim_id", params.claimId);
+      return NextResponse.json({ events: [] });
+    }
+
+    const rows: any[] = [];
+    incoming.forEach((ev: any, idx: number) => {
+      const name = ev.deduction_name || ev.event;
+      const from = ev.from_datetime || ev.start;
+      const to = ev.to_datetime || ev.end;
+      if (!name || !from || !to) return;
+      const rate = ev.rate_of_calculation ?? ev.ratePercent ?? 100;
+      rows.push({
+        claim_id: params.claimId,
+        tenant_id: claimAny.tenant_id,
+        deduction_name: name,
+        from_datetime: from,
+        to_datetime: to,
+        rate_of_calculation: rate,
+        port_call_id: ev.port_call_id ?? null,
+        time_used: hoursBetween(from, to, rate),
+        row_order: idx + 1,
+      });
+    });
+
+    // replace all events for this claim
+    await supabase.from("calculation_events").delete().eq("claim_id", params.claimId);
+    if (rows.length === 0) return NextResponse.json({ events: [] });
+
+    const { data, error: insertErr } = await supabase.from("calculation_events").insert(rows).select();
+    if (insertErr) {
+      console.error("PATCH /events insert error", insertErr);
+      return NextResponse.json({ error: insertErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ events: data || [] });
+  } catch (e: any) {
+    console.error("PATCH /events error", e);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}

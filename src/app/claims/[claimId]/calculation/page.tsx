@@ -30,6 +30,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Plus } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { SofExtractEvent, SofExtractResult } from "@/lib/sof-extractor";
+// Sof extractor tab extracted to a standalone client component to avoid parse issues with inline definitions.
+import SofExtractorTab from "./SofExtractorTab";
 
 type Claim = {
   id: string;
@@ -156,7 +158,7 @@ function durationHours(from: string, to: string, rate: number) {
   const hours = (end - start) / (1000 * 60 * 60);
   const multiplier = Number.isFinite(rate) ? rate / 100 : 1;
   return +(hours * multiplier).toFixed(2);
-}
+};
 
 function formatHours(hours: number, mode: TimeFormat) {
   if (!Number.isFinite(hours)) return "—";
@@ -321,7 +323,7 @@ function AddEventForm({
       </form>
     </div>
   );
-}
+};
 
 function buildStatementSnapshot({
   claim,
@@ -948,7 +950,7 @@ function Summary({
       )}
     </div>
   );
-}
+};
 
 function StatementView({
   claim,
@@ -1185,125 +1187,9 @@ function StatementView({
       </div>
     </div>
   );
-}
+};
 
-function SofExtractorTab({
-  events,
-  attachments,
-  timeFormat,
-}: {
-  events: EventRow[];
-  attachments: Attachment[];
-  timeFormat: TimeFormat;
-}) {
-  const sofFiles = attachments.filter((a) => a.attachment_type?.toLowerCase() === "sof");
-  const sortedEvents = [...events].sort(
-    (a, b) => new Date(a.from_datetime).getTime() - new Date(b.from_datetime).getTime()
-  );
-  const [extracted, setExtracted] = useState<SofExtractResult | null>(null);
-  const [extractError, setExtractError] = useState<string | null>(null);
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs text-slate-500">SOF extraction</p>
-          <h2 className="text-2xl font-semibold text-slate-900">Statement of Facts</h2>
-          <p className="text-xs text-slate-600">Upload SOF, extract events, and reconcile with laytime.</p>
-        </div>
-        <SofExtractorPanel
-          onResult={(r) => {
-            setExtracted(r);
-            setExtractError(r.error || null);
-          }}
-          onError={(msg) => setExtractError(msg)}
-        />
-      </div>
-
-      <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm space-y-2">
-        <p className="text-sm font-semibold text-slate-800">SOF uploads</p>
-        {sofFiles.length === 0 ? (
-          <p className="text-xs text-slate-500">No SOF uploads yet. Add files from the workspace tab.</p>
-        ) : (
-          <ul className="text-sm text-slate-700 list-disc ml-4 space-y-1">
-            {sofFiles.map((f) => (
-              <li key={f.id}>
-                <a className="text-ocean-700" href={f.file_url} target="_blank" rel="noreferrer">
-                  {f.filename}
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center gap-2 mb-3">
-          <CalendarIcon className="w-4 h-4 text-slate-500" />
-          <p className="text-sm font-semibold text-slate-800">SOF timeline</p>
-        </div>
-        {extractError && <p className="text-xs text-red-600 mb-2">Extraction error: {extractError}</p>}
-        {extracted?.events?.length ? (
-          <div className="mb-3 p-3 rounded-lg border border-emerald-100 bg-emerald-50 text-xs text-emerald-800">
-            {extracted.events.length} extracted rows ready to review. Low-confidence rows will need a manual check.
-          </div>
-        ) : null}
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Event</TableHead>
-                <TableHead>Port</TableHead>
-                <TableHead>From</TableHead>
-                <TableHead>To</TableHead>
-                <TableHead>Rate (%)</TableHead>
-                <TableHead>Counted</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(extracted?.events || sortedEvents).length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-sm text-slate-500 py-6">
-                    No events yet.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                (extracted?.events || sortedEvents).map((ev: any, idx: number) => (
-                  <TableRow key={ev.id}>
-                    <TableCell className="text-xs text-slate-500">{idx + 1}</TableCell>
-                    <TableCell className="font-semibold text-slate-800">
-                      {ev.deduction_name || ev.event || "—"}
-                      {typeof ev.confidence === "number" && (
-                        <span className="ml-2 text-[10px] text-slate-500">({Math.round(ev.confidence * 100)}%)</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-700">
-                      {ev.port_calls?.port_name || ev.portCallName || "—"} {ev.port_calls?.activity ? `(${ev.port_calls.activity})` : ""}
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-700">{formatDate(ev.from_datetime || ev.start)}</TableCell>
-                    <TableCell className="text-sm text-slate-700">{formatDate(ev.to_datetime || ev.end)}</TableCell>
-                    <TableCell className="text-sm text-slate-700">{ev.rate_of_calculation ?? ev.ratePercent ?? "—"}%</TableCell>
-                    <TableCell className="text-sm text-slate-900">
-                      {formatHours(
-                        ev.time_used ??
-                          (ev.start && ev.end ? durationHours(ev.start, ev.end, ev.ratePercent || ev.rate_of_calculation || 100) : 0),
-                        timeFormat
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-        <p className="text-[11px] text-slate-500 mt-2">
-          Extraction will map SOF rows into laytime events and flag mismatches for review.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function SofExtractorPanel({ onResult, onError }: { onResult?: (r: SofExtractResult) => void; onError?: (msg: string) => void }) {
   const [uploading, setUploading] = useState(false);
@@ -2369,7 +2255,16 @@ export default function CalculationPage({ params }: { params: { claimId: string 
         </TabsContent>
 
         <TabsContent value="sof">
-          <SofExtractorTab events={enhancedEvents} attachments={attachments} timeFormat={timeFormat} />
+          <SofExtractorTab
+            claim={{ ...claim, ...claimForm } as Claim}
+            events={enhancedEvents}
+            attachments={attachments}
+            timeFormat={timeFormat}
+            formatDate={formatDate}
+            formatHours={formatHours}
+            durationHours={durationHours}
+            SofExtractorPanel={SofExtractorPanel}
+          />
         </TabsContent>
       </Tabs>
     </div>

@@ -7,6 +7,11 @@
 - Dashboard: Claims-by-status, upcoming port calls, usage vs limits, My Queue + unread badge.
 - Laytime foundations: Migration `025_laytime_foundations` adds cargo, charter parties, laytime profiles, laytime calculations, port activities/deductions, cargo-port laytime rows (with RLS); scaffolded `src/lib/laytime-engine` as a pure TS module (currently stubbed).
 - Laytime APIs scaffolded: `/api/laytime-calculations` (list/create), `/api/laytime-calculations/[calcId]` (fetch calc + related data), `/api/laytime-calculations/[calcId]/recalculate` (engine stub call).
+- SOF extractor hardening: moved SOF tab into a client component with summary/preview/timeline, added low-confidence filtering on `/api/sof-extract` (env `SOF_CONFIDENCE_FLOOR`), and surfaced warnings/bad rows counts in the UI.
+- SOF UX: SOF tab now shows signed attachment links/preview, uses hover/click to jump pages, allows inline edit of events (name/from/to/rate), delete, and manual add (with page). Preview has an “open in new tab” action. Timeline is scrollable to keep preview stable.
+- Attachments signing: `/api/claims/[claimId]/attachments` now signs storage URLs (using `SUPABASE_SERVICE_ROLE_KEY`) and returns `signed_url` for reliable PDF embedding.
+- OCR service sample: provided an updated FastAPI extractor that returns per-line bounding boxes, page/line, confidence, and boxes array for overlay; still basic date/time parsing.
+- SOF highlights: Implemented client-side pdf.js renderer with aligned bbox overlays (when pdf.js loads); falls back to iframe if pdf.js fails. Local pdf.js assets expected at `public/pdfjs-dist/build/pdf.min.js` and `pdf.worker.min.js`.
 
 ## Migrations
 - `020_qc_and_comments.sql`: QC fields, `claim_comments`.

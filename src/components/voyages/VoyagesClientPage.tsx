@@ -62,7 +62,7 @@ function TenantSelector({ currentTenantId }: { currentTenantId?: string }) {
   }, []);
 
   const handleSelect = (tenantId?: string) => {
-    const params = new URLSearchParams(searchParams);
+    const params = new URLSearchParams(searchParams || undefined);
     if (tenantId && tenantId !== "all") params.set('tenantId', tenantId); else params.delete('tenantId');
     router.push(`${window.location.pathname}?${params.toString()}`);
   };
@@ -98,14 +98,14 @@ export default function VoyagesClientPage({ voyages, lookups, tenantIdFilter, pa
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
-    const params = new URLSearchParams(searchParams);
+    const params = new URLSearchParams(searchParams || undefined);
     params.set("q", e.target.value);
     params.set("page", "1");
     router.replace(`${pathname}?${params.toString()}`);
   };
 
   const handlePaginate = (newPage: number) => {
-    const params = new URLSearchParams(searchParams);
+    const params = new URLSearchParams(searchParams || undefined);
     params.set("page", newPage.toString());
     router.push(`${pathname}?${params.toString()}`);
   };
