@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     const {
       voyage_id,
       claim_reference,
-      claim_status = "draft",
+      claim_status = "created",
       tenant_id: requestedTenantId,
       operation_type,
       port_name,

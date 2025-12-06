@@ -61,7 +61,7 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
 
   const [claimRef, setClaimRef] = useState("");
   const [voyageId, setVoyageId] = useState("");
-  const [status, setStatus] = useState("draft");
+  const [status, setStatus] = useState("created");
   const [operationType, setOperationType] = useState<"load" | "discharge" | "">("");
   const [portName, setPortName] = useState("");
   const [country, setCountry] = useState("");
@@ -494,7 +494,7 @@ export function CreateClaimDialog({ voyages, tenantId, isSuperAdmin, terms, defa
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="created">Created</SelectItem>
                         <SelectItem value="in_progress">In Progress</SelectItem>
                         <SelectItem value="completed">Completed</SelectItem>
                         <SelectItem value="archived">Archived</SelectItem>

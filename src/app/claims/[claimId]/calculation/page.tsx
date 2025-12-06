@@ -1191,7 +1191,17 @@ function StatementView({
 
 
 
-function SofExtractorPanel({ onResult, onError }: { onResult?: (r: SofExtractResult) => void; onError?: (msg: string) => void }) {
+function SofExtractorPanel({
+  onResult,
+  onError,
+  claimId,
+  onAttachmentAdded,
+}: {
+  onResult?: (r: SofExtractResult) => void;
+  onError?: (msg: string) => void;
+  claimId?: string;
+  onAttachmentAdded?: (att: any) => void;
+}) {
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<SofExtractResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1204,6 +1214,24 @@ function SofExtractorPanel({ onResult, onError }: { onResult?: (r: SofExtractRes
     const form = new FormData();
     form.append("file", file);
     try {
+      // Upload to claim attachments first (so SOF file is stored), then extract using the same file.
+      if (claimId) {
+        const uploadForm = new FormData();
+        uploadForm.append("file", file);
+        uploadForm.append("attachment_type", "sof");
+        const uploadRes = await fetch(`/api/claims/${claimId}/attachments`, {
+          method: "POST",
+          body: uploadForm,
+        });
+        const uploadJson = await uploadRes.json();
+        if (!uploadRes.ok) {
+          throw new Error(uploadJson?.error || "Upload failed");
+        }
+        if (uploadJson?.attachment && onAttachmentAdded) {
+          onAttachmentAdded(uploadJson.attachment);
+        }
+      }
+
       const res = await fetch("/api/sof-extract", {
         method: "POST",
         body: form,
@@ -1277,6 +1305,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null);
   const [quickEditOpen, setQuickEditOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"workspace" | "statement" | "sof">("workspace");
+  const [, setSofSummaryStatus] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -1443,6 +1472,45 @@ export default function CalculationPage({ params }: { params: { claimId: string 
 
   const handleClaimFieldChange = (field: keyof Claim, value: any) => {
     setClaimForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const applySofSummaryToClaim = async (fields: Record<string, any>) => {
+    if (!claim) throw new Error("Claim not loaded");
+    const normalizeDate = (val: any) => {
+      if (!val) return null;
+      const d = new Date(val);
+      if (Number.isNaN(d.getTime())) return val;
+      return d.toISOString();
+    };
+
+    const payload: Record<string, any> = {};
+    if (fields.port_name) payload.port_name = fields.port_name;
+    if (fields.operation_type) payload.operation_type = fields.operation_type;
+    if (fields.laycan_start) payload.laycan_start = normalizeDate(fields.laycan_start);
+    if (fields.laycan_end) payload.laycan_end = normalizeDate(fields.laycan_end);
+
+    if (Object.keys(payload).length === 0) {
+      setSofSummaryStatus("No mappable fields found in SOF header.");
+      return "No mappable fields";
+    }
+
+    setSofSummaryStatus("Saving SOF header to claim…");
+    const res = await fetch(`/api/claims/${claim.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      const msg = json?.error || "Failed to apply SOF header";
+      setSofSummaryStatus(msg);
+      throw new Error(msg);
+    }
+
+    setClaim((prev) => (prev ? ({ ...prev, ...payload } as Claim) : prev));
+    setClaimForm((prev) => ({ ...prev, ...payload }));
+    setSofSummaryStatus("SOF header applied to claim.");
+    return "SOF header applied to claim.";
   };
 
   const uploadAttachment = async (file: File, attachment_type: string) => {
@@ -2259,6 +2327,8 @@ export default function CalculationPage({ params }: { params: { claimId: string 
             claim={{ ...claim, ...claimForm } as Claim}
             events={enhancedEvents}
             attachments={attachments}
+            onApplySummary={applySofSummaryToClaim}
+            onAttachmentAdded={(att) => setAttachments((prev) => [att, ...prev])}
             timeFormat={timeFormat}
             formatDate={formatDate}
             formatHours={formatHours}

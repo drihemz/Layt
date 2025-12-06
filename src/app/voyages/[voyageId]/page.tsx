@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PortCallTimeline } from "@/components/voyages/PortCallTimeline";
+import { PortCallFromSofButton } from "@/components/voyages/PortCallFromSofButton";
 
 async function loadVoyage(voyageId: string, tenantId?: string, role?: string) {
   const supabase = createServerClient();
@@ -76,7 +77,8 @@ export default async function VoyageDetailPage({ params }: { params: { voyageId:
           <p className="text-sm text-slate-600">Vessel: {voyage.vessels?.name || "—"} · Cargo: {voyage.cargo_names?.name || "—"} ({voyage.cargo_quantity || "—"})</p>
           <p className="text-xs text-slate-500">Owner: {voyage.owner?.name || "—"} · Charterer: {voyage.charterer?.name || "—"}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <PortCallFromSofButton voyageId={voyage.id} label="Create port call from SOF" variant="outline" />
           <Link className="text-sm font-semibold text-[#1f5da8]" href={`/claims?voyageId=${voyage.id}&openCreate=1`}>Create Claim</Link>
           <Link className="text-sm font-semibold text-[#1f5da8]" href="/voyages">Back</Link>
         </div>

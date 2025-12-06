@@ -42,6 +42,18 @@ function parseTime(text: string): string | null {
   return `${hh}:${mm}`;
 }
 
+// Accepts formats like 05-07/01/2025 or 05/01/2025-07/01/2025
+function parseDateRange(text: string): { start?: string | null; end?: string | null } {
+  const normalized = text.replace(/\s+/g, "");
+  const parts = normalized.split(/to|-|→/i);
+  if (parts.length !== 2) return {};
+  const startRaw = parts[0];
+  const endRaw = parts[1];
+  const start = parseDate(startRaw) || parseDate(endRaw) || null;
+  const end = parseDate(endRaw) || null;
+  return { start, end };
+}
+
 function stripDateTimePrefix(label: string): string {
   let out = label;
   // Remove leading date tokens
@@ -64,6 +76,14 @@ function isPureDateTime(label: string): boolean {
   return tmp.length === 0;
 }
 
+function parseQuantity(text: string): { qty: number; unit: string } | null {
+  const m = text.match(/(\d{1,3}(?:[.,]\d{3})*(?:\.\d+)?)\s*(mt|m\/t|tons|tonnes|t)?/i);
+  if (!m) return null;
+  const num = parseFloat(m[1].replace(/,/g, ""));
+  if (!Number.isFinite(num)) return null;
+  return { qty: num, unit: m[2] || "" };
+}
+
 function normalizeSofEvents(rawEvents: any[]) {
   let currentDate: string | null = null;
   const headings = [
@@ -75,18 +95,84 @@ function normalizeSofEvents(rawEvents: any[]) {
     "signatures",
     "terminal representative",
   ];
-  const skipPrefixes = ["port:", "vessel:", "flag:", "cargo:", "intended loading", "final loaded", "cargo description", "dwt:"];
-  const skipContains = ["cargo condition", "trimmed, inspected, secured"];
+  const skipPrefixes = ["intended loading", "final loaded", "cargo description", "dwt:"];
+  const skipContains = ["cargo condition", "trimmed, inspected, secured", "signature", "master:", "agent:", "terminal representative"];
   const quantityLine = (val: string) => /^\d{1,3}(?:[.,]\d{3})*(?:\.\d+)?\s*mt\b/i.test(val);
   const durationKeywords = ["delay", "weather", "rain", "suspension", "stoppage", "disruption", "shift", "survey", "inspection", "sampling"];
 
   const normalized: any[] = [];
+  const summary: any = {};
 
   for (const ev of rawEvents) {
     const warnings: string[] = Array.isArray(ev.warnings) ? [...ev.warnings] : [];
     const labelRaw = (ev.event || ev.deduction_name || "").toString();
     const label = labelRaw.replace(/\s+/g, " ").trim();
     const lower = label.toLowerCase();
+
+    // Harvest header info before any skipping
+    if (lower.startsWith("port:")) {
+      summary.port_name = label.replace(/^port:\s*/i, "").trim() || summary.port_name;
+    }
+    // Generic "Port of X" capture
+    if (!summary.port_name) {
+      const m = label.match(/port\s+of\s+(.+)/i);
+      if (m) summary.port_name = m[1].trim();
+    }
+    if (lower.includes("terminal")) {
+      const m = label.match(/terminal[:\-]?\s*(.*)/i);
+      if (m) summary.terminal = m[1].trim() || summary.terminal;
+    }
+    if (lower.startsWith("vessel:")) {
+      summary.vessel_name = label.replace(/^vessel:\s*/i, "").trim() || summary.vessel_name;
+    }
+    if (lower.includes("imo")) {
+      const m = label.match(/imo[:\s]*([0-9]{6,7})/i);
+      if (m) summary.imo = m[1];
+    }
+    if (lower.startsWith("cargo:")) {
+      summary.cargo_name = label.replace(/^cargo:\s*/i, "").trim() || summary.cargo_name;
+      const qty = parseQuantity(label);
+      if (qty) summary.cargo_quantity = qty.qty + (qty.unit ? ` ${qty.unit}` : "");
+    }
+    if (lower.includes("laycan")) {
+      const range = label.match(/laycan[:\s]*([0-9A-Za-z/\\-]+)\s*(?:to|-|→)\s*([0-9A-Za-z/\\-]+)/i);
+      if (range) {
+        const start = parseDate(range[1]);
+        const end = parseDate(range[2]);
+        if (start) summary.laycan_start = start;
+        if (end) summary.laycan_end = end;
+      }
+    }
+    // Handle generic date ranges that look like laycan (05-07 Jan 2025)
+    if (!summary.laycan_start || !summary.laycan_end) {
+      const rangeParsed = parseDateRange(label);
+      if (rangeParsed.start && !summary.laycan_start) summary.laycan_start = rangeParsed.start;
+      if (rangeParsed.end && !summary.laycan_end) summary.laycan_end = rangeParsed.end;
+    }
+    if (!summary.operation_type) {
+      if (lower.includes("load")) summary.operation_type = "load";
+      if (lower.includes("disch") || lower.includes("discharge")) summary.operation_type = "discharge";
+    }
+    if (!summary.cargo_name && lower.startsWith("cargo")) {
+      const m = label.match(/cargo[:\s-]*(.+)/i);
+      if (m) summary.cargo_name = m[1].trim();
+    }
+    if (!summary.cargo_quantity) {
+      const qty = parseQuantity(label);
+      if (qty) summary.cargo_quantity = qty.qty + (qty.unit ? ` ${qty.unit}` : "");
+    }
+    if (!summary.vessel_name) {
+      const m = label.match(/\b(m\/v|mv)\s+([A-Z0-9 _-]+)/i);
+      if (m) summary.vessel_name = m[2].trim();
+    }
+    if (!summary.imo) {
+      const m = label.match(/\bIMO[:\s]*([0-9]{6,7})/i);
+      if (m) summary.imo = m[1];
+    }
+    if (!summary.terminal) {
+      const m = label.match(/terminal[:\s-]*([A-Za-z0-9 \/-]+)/i);
+      if (m) summary.terminal = m[1].trim();
+    }
 
     if (
       headings.some((h) => lower.includes(h)) ||
@@ -145,7 +231,7 @@ function normalizeSofEvents(rawEvents: any[]) {
     normalized.push(ev);
   }
 
-  return normalized;
+  return { events: normalized, summary };
 }
 
 export async function POST(req: Request) {
@@ -191,7 +277,7 @@ export async function POST(req: Request) {
     if (!json || !Array.isArray(json.events)) {
       return NextResponse.json({ error: "Invalid response from SOF service", raw: text }, { status: 502 });
     }
-    const normalizedEvents = normalizeSofEvents(json.events);
+    const { events: normalizedEvents, summary: extractedSummary } = normalizeSofEvents(json.events);
 
     const filtered = [];
     const filteredOut: any[] = [];
@@ -216,6 +302,13 @@ export async function POST(req: Request) {
       filtered.push(merged);
     }
 
+    const mergedSummary =
+      json.summary ||
+      json.header ||
+      (extractedSummary && Object.keys(extractedSummary).length > 0 ? extractedSummary : null) || {
+        port_name: "SOF port (unspecified)",
+      };
+
     return NextResponse.json({
       events: filtered,
       meta: {
@@ -223,7 +316,7 @@ export async function POST(req: Request) {
         confidenceFloor,
       },
       filtered_out: filteredOut,
-      summary: json.summary || json.header || null,
+      summary: mergedSummary,
       raw: json.raw || null,
     });
   } catch (err: any) {

@@ -26,6 +26,7 @@ import { useEffect } from 'react';
 import Link from "next/link";
 import { EditVoyageDialog } from "./EditVoyageDialog";
 import { PortCallsDialog } from "./PortCallsDialog";
+import { PortCallFromSofButton } from "./PortCallFromSofButton";
 
 type Lookups = {
   parties: any[];
@@ -212,6 +213,9 @@ export default function VoyagesClientPage({ voyages, lookups, tenantIdFilter, pa
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild>
                           <PortCallsDialog voyageId={voyage.id} onChange={() => router.refresh()} />
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <PortCallFromSofButton voyageId={voyage.id} label="Create port call from SOF" variant="ghost" />
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={async () => {

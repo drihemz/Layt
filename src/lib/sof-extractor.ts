@@ -12,14 +12,32 @@ export type SofExtractEvent = {
   confidence?: number | null;
 };
 
+export type SofExtractSummary = {
+  port_name?: string | null;
+  terminal?: string | null;
+  vessel_name?: string | null;
+  imo?: string | null;
+  cargo_name?: string | null;
+  cargo_quantity?: string | number | null;
+  laycan_start?: string | null;
+  laycan_end?: string | null;
+  operation_type?: string | null;
+  raw?: any;
+};
+
 export type SofExtractResult = {
   events: SofExtractEvent[];
+  filtered_out?: SofExtractEvent[];
   warnings?: string[];
   error?: string;
   meta?: {
     sourcePages?: number;
     durationMs?: number;
+    filteredOutCount?: number;
+    confidenceFloor?: number;
   };
+  summary?: SofExtractSummary | null;
+  raw?: any;
 };
 
 /**

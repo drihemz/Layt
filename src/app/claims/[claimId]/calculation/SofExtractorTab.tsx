@@ -10,15 +10,24 @@ export type SofExtractorTabProps = {
   claim: any;
   events: any[];
   attachments: any[];
+  onApplySummary?: (fields: Record<string, any>) => Promise<string | void> | string | void;
+  onAttachmentAdded?: (att: any) => void;
+  onPortCallCreated?: (payload: { port_call: any; events?: any[]; claim?: any }) => void;
   timeFormat: "dhms" | "decimal";
   formatDate: (value: any) => string;
   formatHours: (hours: number, mode: "dhms" | "decimal") => string;
   durationHours: (from: any, to: any, rate: number) => number;
-  SofExtractorPanel: React.ComponentType<{ onResult?: (r: SofExtractResult) => void; onError?: (msg: string) => void }>;
+  SofExtractorPanel: React.ComponentType<{
+    claimId?: string;
+    onResult?: (r: SofExtractResult) => void;
+    onError?: (msg: string) => void;
+    onAttachmentAdded?: (att: any) => void;
+  }>;
 };
 
 export default function SofExtractorTab(props: SofExtractorTabProps) {
   const { claim, events, attachments, timeFormat, formatDate, formatHours, durationHours, SofExtractorPanel } = props;
+  const { onApplySummary, onAttachmentAdded, onPortCallCreated } = props;
 
   const sofFiles = attachments
     .filter((a) => a.attachment_type?.toLowerCase() === "sof")
@@ -41,6 +50,9 @@ export default function SofExtractorTab(props: SofExtractorTabProps) {
   const [pdfReady, setPdfReady] = useState<boolean>(false);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [summaryStatus, setSummaryStatus] = useState<string | null>(null);
+  const [pcStatus, setPcStatus] = useState<string | null>(null);
+  const [pcLoading, setPcLoading] = useState(false);
 
   const portCalls = Array.isArray(claim?.port_calls) ? claim.port_calls : [];
   const filteredOutCount = (extracted as any)?.meta?.filteredOutCount || 0;
@@ -98,6 +110,44 @@ export default function SofExtractorTab(props: SofExtractorTabProps) {
     setEditingEvents((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  const summary = extracted?.summary || null;
+
+  const handleApplySummary = async () => {
+    if (!summary || !onApplySummary) return;
+    const payload: Record<string, any> = {};
+    const portText = summary.port_name || (summary as any).port || summary.terminal;
+    if (portText) payload.port_name = portText;
+
+    const laycanStart = summary.laycan_start || summary.laycanStart;
+    const laycanEnd = summary.laycan_end || summary.laycanEnd;
+    if (laycanStart) payload.laycan_start = laycanStart;
+    if (laycanEnd) payload.laycan_end = laycanEnd;
+
+    const op = summary.operation_type || summary.activity;
+    if (op && typeof op === "string") {
+      const lower = op.toLowerCase();
+      if (lower.includes("dis")) payload.operation_type = "discharge";
+      else if (lower.includes("load")) payload.operation_type = "load";
+    }
+
+    if (Object.keys(payload).length === 0) {
+      setSummaryStatus("No mappable fields in SOF header.");
+      return;
+    }
+
+    const confirmMsg = `Apply SOF header to claim?\nPort: ${payload.port_name || "—"}\nLaycan: ${payload.laycan_start || "—"} → ${payload.laycan_end || "—"}`;
+    const ok = typeof window === "undefined" ? true : window.confirm(confirmMsg);
+    if (!ok) return;
+
+    setSummaryStatus("Applying...");
+    try {
+      const res = await onApplySummary(payload);
+      setSummaryStatus(res || "SOF header applied to claim");
+    } catch (err: any) {
+      setSummaryStatus(err?.message || "Failed to apply header");
+    }
+  };
+
   // derive page dimensions from bboxes so we can scale overlays
   const pageDims = React.useMemo(() => {
     const dims: Record<number, { w: number; h: number }> = {};
@@ -152,6 +202,32 @@ export default function SofExtractorTab(props: SofExtractorTabProps) {
       setSaveStatus(err.message || "Save failed");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCreatePortCall = async () => {
+    if (!claim?.id || !summary) return;
+    setPcLoading(true);
+    setPcStatus(null);
+    const payload = {
+      summary,
+      events: editingEvents,
+    };
+    try {
+      const res = await fetch(`/api/claims/${claim.id}/port-call-from-sof`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to create port call");
+      setPcStatus("Port call created from SOF and events saved.");
+      if (onPortCallCreated) onPortCallCreated(json);
+    } catch (err: any) {
+      console.error("Create port call from SOF failed", err);
+      setPcStatus(err?.message || "Failed to create port call");
+    } finally {
+      setPcLoading(false);
     }
   };
 
@@ -248,7 +324,19 @@ export default function SofExtractorTab(props: SofExtractorTabProps) {
           >
             {saving ? "Saving..." : "Save to claim events"}
           </button>
+          {summary && (
+            <button
+              type="button"
+              onClick={handleCreatePortCall}
+              disabled={pcLoading}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 disabled:opacity-50"
+            >
+              {pcLoading ? "Creating port call..." : "Create port call from SOF"}
+            </button>
+          )}
           <SofExtractorPanel
+            claimId={claim?.id}
+            onAttachmentAdded={onAttachmentAdded}
             onResult={(r) => {
               setExtracted(r);
               setExtractError(r.error || null);
@@ -260,6 +348,57 @@ export default function SofExtractorTab(props: SofExtractorTabProps) {
         </div>
       </div>
       {saveStatus && <p className="text-[11px] text-slate-600 text-right">{saveStatus}</p>}
+      {pcStatus && <p className="text-[11px] text-slate-600 text-right">{pcStatus}</p>}
+
+      {summary && (
+        <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50 shadow-sm space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold text-emerald-800">Extracted header</p>
+              <h3 className="text-lg font-semibold text-slate-900">Port · Vessel · Cargo · Laycan</h3>
+              <p className="text-[11px] text-emerald-900/80">Review and apply to claim header if correct.</p>
+            </div>
+            {onApplySummary && (
+              <button
+                type="button"
+                onClick={handleApplySummary}
+                className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100"
+              >
+                Apply to claim
+              </button>
+            )}
+          </div>
+          <div className="grid md:grid-cols-4 gap-3 text-sm text-slate-900">
+            <div>
+              <p className="text-[11px] text-slate-600 uppercase tracking-wide">Port</p>
+              <p className="font-semibold">
+                {summary.port_name || (summary as any).port || summary.terminal || "—"}
+              </p>
+              {summary.terminal && <p className="text-[11px] text-slate-600 mt-1">Terminal: {summary.terminal}</p>}
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-600 uppercase tracking-wide">Vessel</p>
+              <p className="font-semibold">{summary.vessel_name || "—"}</p>
+              {summary.imo && <p className="text-[11px] text-slate-600 mt-1">IMO: {summary.imo}</p>}
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-600 uppercase tracking-wide">Cargo</p>
+              <p className="font-semibold">
+                {summary.cargo_name || "—"}
+                {summary.cargo_quantity ? ` · ${summary.cargo_quantity}` : ""}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-600 uppercase tracking-wide">Laycan</p>
+              <p className="font-semibold">
+                {summary.laycan_start ? formatDate(summary.laycan_start) : "—"}
+                {summary.laycan_end ? ` → ${formatDate(summary.laycan_end)}` : ""}
+              </p>
+            </div>
+          </div>
+          {summaryStatus && <p className="text-[11px] text-slate-700">{summaryStatus}</p>}
+        </div>
+      )}
 
       <div className="grid md:grid-cols-3 gap-3">
         <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
