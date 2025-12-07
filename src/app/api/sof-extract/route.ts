@@ -22,6 +22,22 @@ function parseDate(text: string): string | null {
   // Normalize spaces and fix split month tokens like "J an"
   let cleaned = text.replace(/\s+/g, " ").replace(/-\s+/g, "-").replace(/\s+-/g, "-");
   cleaned = cleaned.replace(/([A-Za-z])\s+([A-Za-z])/g, "$1$2");
+  cleaned = cleaned
+    .replace(/J\s*an/gi, "Jan")
+    .replace(/F\s*eb/gi, "Feb")
+    .replace(/M\s*ar/gi, "Mar")
+    .replace(/A\s*pr/gi, "Apr")
+    .replace(/M\s*ay/gi, "May")
+    .replace(/J\s*un/gi, "Jun")
+    .replace(/J\s*ul/gi, "Jul")
+    .replace(/A\s*ug/gi, "Aug")
+    .replace(/S\s*ep/gi, "Sep")
+    .replace(/O\s*ct/gi, "Oct")
+    .replace(/N\s*ov/gi, "Nov")
+    .replace(/D\s*ec/gi, "Dec")
+    .replace(/-\)\s*an/gi, "-Jan")
+    .replace(/\)\s*an/gi, "Jan")
+    .replace(/\)\s*ug/gi, "Aug");
   const m = cleaned.match(/(\d{1,2})\s*[-/]\s*([A-Za-z]{3})[A-Za-z]*\s*[-/]\s*(\d{2,4})/);
   if (!m) return null;
   const day = m[1].padStart(2, "0");
@@ -52,6 +68,38 @@ function parseDateRange(text: string): { start?: string | null; end?: string | n
   const start = parseDate(startRaw) || parseDate(endRaw) || null;
   const end = parseDate(endRaw) || null;
   return { start, end };
+}
+
+function attachEndDate(from: string | null | undefined, to: string | null | undefined): string | null {
+  if (!from || !to) return to || null;
+  if (typeof to !== "string") return to as any;
+  if (to.includes("T")) return to;
+  const startDate = from.includes("T") ? from.split("T")[0] : null;
+  if (!startDate) return to;
+  const endTime = to.includes(":") ? to : `${to}:00`;
+  let candidate = `${startDate}T${endTime}`;
+  const s = new Date(from).getTime();
+  const e = new Date(candidate).getTime();
+  if (!Number.isNaN(s) && !Number.isNaN(e) && e < s) {
+    candidate = new Date(e + 24 * 3600 * 1000).toISOString();
+  }
+  return candidate;
+}
+
+function bestQuantityFromEvents(rawEvents: any[]): string | null {
+  let best: { qty: number; unit?: string | null } | null = null;
+  for (const ev of rawEvents || []) {
+    const label = (ev.event || ev.notes || "").toString();
+    if (!label) continue;
+    if (!/quantity|final|loaded|discharged|figure|mt/i.test(label)) continue;
+    const q = parseQuantity(label);
+    if (!q) continue;
+    if (!best || q.qty > best.qty) {
+      best = q;
+    }
+  }
+  if (!best) return null;
+  return `${best.qty}${best.unit ? ` ${best.unit}` : ""}`;
 }
 
 function stripDateTimePrefix(label: string): string {
@@ -86,7 +134,7 @@ function parseQuantity(text: string): { qty: number; unit: string } | null {
 
 function normalizeSofEvents(rawEvents: any[]) {
   let currentDate: string | null = null;
-  const headings = [
+const headings = [
     "statement of facts",
     "arrival / departure summary",
     "arrival/departure summary",
@@ -110,30 +158,41 @@ function normalizeSofEvents(rawEvents: any[]) {
     const lower = label.toLowerCase();
 
     // Harvest header info before any skipping
-    if (lower.startsWith("port:")) {
-      summary.port_name = label.replace(/^port:\s*/i, "").trim() || summary.port_name;
+    // Ports
+    if (lower.startsWith("loading port") || lower.startsWith("discharge port") || lower.startsWith("port:")) {
+      const m = label.match(/(?:loading port|discharge port|port)[:\s-]*(.+)/i);
+      if (m) summary.port_name = m[1].trim() || summary.port_name;
     }
-    // Generic "Port of X" capture
     if (!summary.port_name) {
       const m = label.match(/port\s+of\s+(.+)/i);
       if (m) summary.port_name = m[1].trim();
     }
-    if (lower.includes("terminal")) {
-      const m = label.match(/terminal[:\-]?\s*(.*)/i);
-      if (m) summary.terminal = m[1].trim() || summary.terminal;
+    // Terminal
+    if (!summary.terminal && lower.includes("terminal")) {
+      const m = label.match(/terminal[:\-]?\s*([A-Za-z0-9 \/-]+)/i);
+      if (m) summary.terminal = m[1].trim();
     }
-    if (lower.startsWith("vessel:")) {
-      summary.vessel_name = label.replace(/^vessel:\s*/i, "").trim() || summary.vessel_name;
+    // Vessel
+    if (lower.startsWith("vessel") || lower.includes("vessel name")) {
+      const m = label.match(/vessel(?:\s+name)?:\s*([A-Za-z0-9 _-]+)/i);
+      if (m) summary.vessel_name = m[1].trim();
+    }
+    if (!summary.vessel_name) {
+      const m = label.match(/\b(m\/v|mv)\s+([A-Z0-9 _-]+)/i);
+      if (m) summary.vessel_name = m[2].trim();
     }
     if (lower.includes("imo")) {
       const m = label.match(/imo[:\s]*([0-9]{6,7})/i);
       if (m) summary.imo = m[1];
     }
-    if (lower.startsWith("cargo:")) {
-      summary.cargo_name = label.replace(/^cargo:\s*/i, "").trim() || summary.cargo_name;
+    // Cargo
+    if (lower.startsWith("cargo") || lower.includes("cargo name")) {
+      const m = label.match(/cargo(?:\s+name)?:\s*([A-Za-z0-9 ,._-]+)/i);
+      if (m) summary.cargo_name = m[1].trim() || summary.cargo_name;
       const qty = parseQuantity(label);
       if (qty) summary.cargo_quantity = qty.qty + (qty.unit ? ` ${qty.unit}` : "");
     }
+    // Laycan
     if (lower.includes("laycan")) {
       const range = label.match(/laycan[:\s]*([0-9A-Za-z/\\-]+)\s*(?:to|-|→)\s*([0-9A-Za-z/\\-]+)/i);
       if (range) {
@@ -143,7 +202,6 @@ function normalizeSofEvents(rawEvents: any[]) {
         if (end) summary.laycan_end = end;
       }
     }
-    // Handle generic date ranges that look like laycan (05-07 Jan 2025)
     if (!summary.laycan_start || !summary.laycan_end) {
       const rangeParsed = parseDateRange(label);
       if (rangeParsed.start && !summary.laycan_start) summary.laycan_start = rangeParsed.start;
@@ -153,25 +211,10 @@ function normalizeSofEvents(rawEvents: any[]) {
       if (lower.includes("load")) summary.operation_type = "load";
       if (lower.includes("disch") || lower.includes("discharge")) summary.operation_type = "discharge";
     }
-    if (!summary.cargo_name && lower.startsWith("cargo")) {
-      const m = label.match(/cargo[:\s-]*(.+)/i);
-      if (m) summary.cargo_name = m[1].trim();
-    }
+    // Fallback cargo quantity
     if (!summary.cargo_quantity) {
       const qty = parseQuantity(label);
       if (qty) summary.cargo_quantity = qty.qty + (qty.unit ? ` ${qty.unit}` : "");
-    }
-    if (!summary.vessel_name) {
-      const m = label.match(/\b(m\/v|mv)\s+([A-Z0-9 _-]+)/i);
-      if (m) summary.vessel_name = m[2].trim();
-    }
-    if (!summary.imo) {
-      const m = label.match(/\bIMO[:\s]*([0-9]{6,7})/i);
-      if (m) summary.imo = m[1];
-    }
-    if (!summary.terminal) {
-      const m = label.match(/terminal[:\s-]*([A-Za-z0-9 \/-]+)/i);
-      if (m) summary.terminal = m[1].trim();
     }
 
     if (
@@ -210,7 +253,10 @@ function normalizeSofEvents(rawEvents: any[]) {
       continue;
     }
 
-    const cleanedLabel = stripDateTimePrefix(label);
+    let cleanedLabel = stripDateTimePrefix(label);
+    if (cleanedLabel.includes(". ")) {
+      cleanedLabel = cleanedLabel.split(". ")[0].trim();
+    }
     const alphaOnly = cleanedLabel.replace(/[^a-zA-Z]/g, "");
     // If label is only date/time with no meaningful text, skip emitting.
     const singleWord = cleanedLabel.split(/\s+/).filter(Boolean);
@@ -222,6 +268,9 @@ function normalizeSofEvents(rawEvents: any[]) {
     ev.warnings = Array.from(new Set(warnings));
     ev.event = ev.event || ev.deduction_name || cleanedLabel || "Event";
     ev.event = stripDateTimePrefix(ev.event);
+
+    // Attach date to end time if missing and roll forward if needed
+    ev.to_datetime = attachEndDate(ev.from_datetime || ev.start, ev.to_datetime || ev.end) || ev.to_datetime;
 
     // Categorize instant vs duration
     const hasDuration = ev.from_datetime && ev.to_datetime && ev.from_datetime !== ev.to_datetime;
@@ -283,24 +332,34 @@ export async function POST(req: Request) {
     const filteredOut: any[] = [];
 
     for (const ev of normalizedEvents) {
-      const warnings: string[] = [];
-      const from = ev.from_datetime ?? ev.start;
-      const to = ev.to_datetime ?? ev.end;
+    const warnings: string[] = [];
+    const from = ev.from_datetime ?? ev.start;
+    let to = ev.to_datetime ?? ev.end;
 
-      if (!ev.event && !ev.deduction_name) warnings.push("Missing event label");
-      if (!from) warnings.push("Missing start time");
-      if (!to) warnings.push("Missing end time");
-      if (from && to && new Date(from).getTime() > new Date(to).getTime()) warnings.push("Start after end");
-
-      const confidence = typeof ev.confidence === "number" ? ev.confidence : null;
-      const merged = { ...ev, warnings };
-
-      if (confidence !== null && confidence < confidenceFloor) {
-        filteredOut.push(merged);
-        continue;
+    // Attach date to end time when missing but start has a date
+    if (from && to) {
+      const adjusted = attachEndDate(from, to);
+      if (adjusted) {
+        to = adjusted;
+        ev.to_datetime = adjusted;
       }
-      filtered.push(merged);
     }
+
+    if (!ev.event && !ev.deduction_name) warnings.push("Missing event label");
+    if (!from) warnings.push("Missing start time");
+    if (!to) warnings.push("Missing end time");
+    if (from && to && new Date(from).getTime() > new Date(to).getTime()) warnings.push("Start after end");
+
+    const confidence = typeof ev.confidence === "number" ? ev.confidence : null;
+    const merged = { ...ev, warnings };
+
+    if (confidence !== null && confidence < confidenceFloor) {
+      merged.warnings = Array.from(new Set([...(merged.warnings || []), `Low confidence (< ${confidenceFloor})`]));
+      filteredOut.push(merged);
+      // Still keep it in the main list so we don't lose events
+    }
+    filtered.push(merged);
+  }
 
     const mergedSummary =
       json.summary ||
@@ -308,6 +367,26 @@ export async function POST(req: Request) {
       (extractedSummary && Object.keys(extractedSummary).length > 0 ? extractedSummary : null) || {
         port_name: "SOF port (unspecified)",
       };
+
+    // Backfill cargo quantity from raw events if missing
+    if (mergedSummary) {
+      if (!mergedSummary.cargo_quantity) {
+        const bestQty = bestQuantityFromEvents(json.events || []);
+        if (bestQty) (mergedSummary as any).cargo_quantity = bestQty;
+      }
+      // Clean vessel name (strip trailing Cargo:)
+      if (mergedSummary.vessel_name) {
+        const cleanVessel = (mergedSummary.vessel_name as string).replace(/cargo.*$/i, "").trim();
+        mergedSummary.vessel_name = cleanVessel || mergedSummary.vessel_name;
+      }
+      // If terminal looks like a random word, drop it
+      if (mergedSummary.terminal) {
+        const term = (mergedSummary.terminal as string).trim();
+        if (term.split(" ").length <= 1 || /^\d+$/.test(term)) {
+          mergedSummary.terminal = null;
+        }
+      }
+    }
 
     return NextResponse.json({
       events: filtered,

@@ -10,6 +10,7 @@ import CargoTabContent from "@/components/data/CargoTabContent";
 import CharterPartiesTabContent from "@/components/data/CharterPartiesTabContent";
 import TermsTabContent from "@/components/data/TermsTabContent";
 import RequestsTabContent from "@/components/data/RequestsTabContent";
+import SofBatchUpload from "@/components/data/SofBatchUpload";
 
 import {
   Tabs,
@@ -35,7 +36,7 @@ export default async function DataPage() {
 
   const allowedTabs = planUsage?.allow_data_management !== false;
   const tabFlags = planUsage?.data_tabs || {};
-  const tabOrder = ["parties","vessels","ports","cargo","charterParties","terms","requests"];
+  const tabOrder = ["parties","vessels","ports","cargo","charterParties","terms","requests", "sofBatch"];
   const enabledTabs = tabOrder.filter((k) => tabFlags[k] !== false);
   const firstEnabled = enabledTabs[0];
 
@@ -52,7 +53,7 @@ export default async function DataPage() {
       )}
 
       <Tabs defaultValue={firstEnabled || "parties"} value={firstEnabled ? undefined : "none"} className="w-full">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className={`grid w-full ${session.user.role === "super_admin" ? "grid-cols-8" : "grid-cols-7"}`}>
           <TabsTrigger value="parties" disabled={!allowedTabs || tabFlags.parties === false}>Parties</TabsTrigger>
           <TabsTrigger value="vessels" disabled={!allowedTabs || tabFlags.vessels === false}>Vessels</TabsTrigger>
           <TabsTrigger value="ports" disabled={!allowedTabs || tabFlags.ports === false}>Ports</TabsTrigger>
@@ -61,6 +62,9 @@ export default async function DataPage() {
           <TabsTrigger value="terms" disabled={!allowedTabs || tabFlags.terms === false}>Terms</TabsTrigger>
           {(session.user.role === "customer_admin" || session.user.role === "super_admin") && (
             <TabsTrigger value="requests" disabled={!allowedTabs || tabFlags.requests === false}>Requests</TabsTrigger>
+          )}
+          {session.user.role === "super_admin" && (
+            <TabsTrigger value="sofBatch" disabled={!allowedTabs}>SOF Batch</TabsTrigger>
           )}
         </TabsList>
 
@@ -101,6 +105,12 @@ export default async function DataPage() {
             {(session.user.role === "customer_admin" || session.user.role === "super_admin") && (
               <TabsContent value="requests">
                 <RequestsTabContent session={session} />
+              </TabsContent>
+            )}
+
+            {session.user.role === "super_admin" && (
+              <TabsContent value="sofBatch">
+                <SofBatchUpload />
               </TabsContent>
             )}
           </>

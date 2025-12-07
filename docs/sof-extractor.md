@@ -10,11 +10,21 @@ from typing import List, Dict, Tuple
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pdf2image import convert_from_bytes
 from PIL import Image
 import pytesseract
 
 app = FastAPI()
+
+# CORS: tighten origins to your frontend domains if needed
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 TIME_REGEX = re.compile(r"(\d{1,2}[:\.]\d{2})")
 DATE_REGEX = re.compile(r"(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})")
@@ -37,32 +47,32 @@ def parse_line_groups(ocr: Dict) -> List[Dict]:
         x2 = y2 = -10**9
         confs = []
         for i in idxs:
-            words.append(ocr["text"][i])
-            x, y, w, h = ocr["left"][i], ocr["top"][i], ocr["width"][i], ocr["height"][i]
-            x1 = min(x1, x)
-            y1 = min(y1, y)
-            x2 = max(x2, x + w)
-            y2 = max(y2, y + h)
-            try:
-                c = float(ocr["conf"][i])
-                if c >= 0:
-                    confs.append(c)
-            except Exception:
-                pass
+          words.append(ocr["text"][i])
+          x, y, w, h = ocr["left"][i], ocr["top"][i], ocr["width"][i], ocr["height"][i]
+          x1 = min(x1, x)
+          y1 = min(y1, y)
+          x2 = max(x2, x + w)
+          y2 = max(y2, y + h)
+          try:
+            c = float(ocr["conf"][i])
+            if c >= 0:
+              confs.append(c)
+          except Exception:
+            pass
         text = " ".join(words).strip()
         if not text:
-            continue
+          continue
         bbox = {"x": x1, "y": y1, "width": x2 - x1, "height": y2 - y1}
         avg_conf = sum(confs) / len(confs) if confs else None
         lines.append(
-            {
-                "text": text,
-                "bbox": bbox,
-                "confidence": avg_conf / 100 if avg_conf is not None else None,
-                "block": b,
-                "paragraph": p,
-                "line": l,
-            }
+          {
+            "text": text,
+            "bbox": bbox,
+            "confidence": (avg_conf / 100) if avg_conf is not None else None,
+            "block": b,
+            "paragraph": p,
+            "line": l,
+          }
         )
     return lines
 
@@ -70,7 +80,13 @@ def ocr_images(images: List[Image.Image]):
     events = []
     boxes = []
     for page_idx, img in enumerate(images, start=1):
-        data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+        # Better OCR defaults: OEM 1 (LSTM), PSM 6 (block of text)
+        data = pytesseract.image_to_data(
+            img,
+            output_type=pytesseract.Output.DICT,
+            config="--oem 1 --psm 6",
+            lang="eng",
+        )
         lines = parse_line_groups(data)
         for line_idx, line in enumerate(lines, start=1):
             clean = line["text"].strip()
@@ -115,7 +131,8 @@ async def extract(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Empty file")
     try:
         if file.filename.lower().endswith(".pdf"):
-            images = convert_from_bytes(content, fmt="png")
+            # Higher DPI for better OCR layout
+            images = convert_from_bytes(content, fmt="png", dpi=250)
         else:
             images = [Image.open(io.BytesIO(content))]
     except Exception as e:
@@ -162,3 +179,9 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 Notes:
 - For images, Tesseract is required. For PDFs, `pdf2image` needs poppler.
 - The service responds with events plus per-line `bbox` data so the frontend can draw overlays/highlights.
+- Suggested tweaks for reliability:
+  - Enable CORS (see code snippet above).
+  - Use higher DPI for PDFs (250–300) and `--oem 1 --psm 6` for Tesseract.
+  - Normalize split month tokens (e.g., “J an”, “J ul”) before date parsing.
+  - Attach dates to duration end-times when missing; roll to next day if end < start.
+  - Keep low-confidence rows but flag them, instead of dropping, to avoid missing events.
