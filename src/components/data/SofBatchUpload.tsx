@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 
 type SofResult = {
   name: string;
-  status: "pending" | "ok" | "error";
+  status: "pending" | "processing" | "ok" | "error";
   message?: string;
   summary?: any;
   eventsCount?: number;
@@ -45,21 +45,25 @@ export default function SofBatchUpload() {
       return;
     }
     setRunning(true);
-    setResults(files.map((f) => ({ name: f.name, status: "pending" })));
+    setResults(files.map((f) => ({ name: f.name, status: "pending" as const })));
 
     const floorNum = Number(floor || 0.35) || 0.35;
     const updated: SofResult[] = [];
 
     for (const file of files) {
-      const current: SofResult = { name: file.name, status: "pending" };
+      const current: SofResult = { name: file.name, status: "processing" };
       updated.push(current);
-      setResults([...updated, ...files.slice(updated.length).map((f) => ({ name: f.name, status: "pending" as const }))]);
+      setResults([
+        ...updated,
+        ...files.slice(updated.length).map((f) => ({ name: f.name, status: "pending" as const })),
+      ]);
 
       try {
         const form = new FormData();
         form.append("file", file);
         const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), 180_000);
+        // Allow up to 5 minutes per file to avoid aborting large scans
+        const id = setTimeout(() => controller.abort(), 300_000);
 
         const res = await fetch(normalizedEndpoint, {
           method: "POST",
@@ -68,10 +72,16 @@ export default function SofBatchUpload() {
         });
         clearTimeout(id);
 
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) {
+        const text = await res.text();
+        let json: any = null;
+        try {
+          json = JSON.parse(text);
+        } catch (e) {
+          json = null;
+        }
+        if (!res.ok || !json) {
           current.status = "error";
-          current.message = json?.error || res.statusText || "Failed";
+          current.message = (json && json.error) || text || res.statusText || "Failed";
           continue;
         }
         const events = Array.isArray(json.events) ? json.events : [];
@@ -85,7 +95,10 @@ export default function SofBatchUpload() {
         current.status = "error";
         current.message = err?.message || "Failed";
       }
-      setResults([...updated, ...files.slice(updated.length).map((f) => ({ name: f.name, status: "pending" as const }))]);
+      setResults([
+        ...updated,
+        ...files.slice(updated.length).map((f) => ({ name: f.name, status: "pending" as const })),
+      ]);
     }
 
     setRunning(false);
@@ -203,6 +216,8 @@ export default function SofBatchUpload() {
                   className={`text-[11px] px-2 py-1 rounded-full border ${
                     r.status === "ok"
                       ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : r.status === "processing"
+                      ? "bg-blue-50 text-blue-700 border-blue-200"
                       : r.status === "pending"
                       ? "bg-slate-50 text-slate-600 border-slate-200"
                       : "bg-rose-50 text-rose-700 border-rose-200"

@@ -308,18 +308,26 @@ export async function POST(req: Request) {
   const confidenceFloor = Number(process.env.SOF_CONFIDENCE_FLOOR ?? 0.35);
 
   try {
+    // Timeout safeguard for slow OCR calls
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 300_000); // 5 minutes max
+
     const res = await fetch(target, {
       method: "POST",
       body: forward,
+      signal: controller.signal,
+    }).catch((err) => {
+      throw err;
     });
+    clearTimeout(id);
+
     const text = await res.text();
-    const json = (() => {
-      try {
-        return JSON.parse(text);
-      } catch {
-        return null;
-      }
-    })();
+    let json: any = null;
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      json = null;
+    }
     if (!res.ok) {
       return NextResponse.json({ error: json?.error || text || "SOF service error" }, { status: res.status });
     }
@@ -399,6 +407,9 @@ export async function POST(req: Request) {
       raw: json.raw || null,
     });
   } catch (err: any) {
+    if (err?.name === "AbortError") {
+      return NextResponse.json({ error: "SOF service timed out" }, { status: 504 });
+    }
     return NextResponse.json({ error: err?.message || "Failed to call SOF service" }, { status: 500 });
   }
 }
