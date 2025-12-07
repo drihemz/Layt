@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Allow longer processing time for large SOFs
+export const maxDuration = 300;
 
 const monthMap: Record<string, string> = {
   jan: "01",
