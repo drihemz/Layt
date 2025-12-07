@@ -3,6 +3,15 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase";
 
+function hoursBetween(from: string, to: string, rate: number) {
+  const start = new Date(from).getTime();
+  const end = new Date(to).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return 0;
+  const hours = (end - start) / (1000 * 60 * 60);
+  const multiplier = Number.isFinite(rate) ? rate / 100 : 1;
+  return +(hours * multiplier).toFixed(2);
+}
+
 type LoadedVoyage =
   | { voyage: any; error?: undefined }
   | { voyage?: undefined; error: string };
