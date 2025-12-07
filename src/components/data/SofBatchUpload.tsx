@@ -53,7 +53,7 @@ export default function SofBatchUpload() {
     for (const file of files) {
       const current: SofResult = { name: file.name, status: "pending" };
       updated.push(current);
-      setResults([...updated, ...files.slice(updated.length).map((f) => ({ name: f.name, status: "pending" }))]);
+      setResults([...updated, ...files.slice(updated.length).map((f) => ({ name: f.name, status: "pending" as const }))]);
 
       try {
         const form = new FormData();
@@ -85,7 +85,7 @@ export default function SofBatchUpload() {
         current.status = "error";
         current.message = err?.message || "Failed";
       }
-      setResults([...updated, ...files.slice(updated.length).map((f) => ({ name: f.name, status: "pending" }))]);
+      setResults([...updated, ...files.slice(updated.length).map((f) => ({ name: f.name, status: "pending" as const }))]);
     }
 
     setRunning(false);

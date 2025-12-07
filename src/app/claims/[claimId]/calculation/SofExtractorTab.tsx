@@ -118,12 +118,12 @@ export default function SofExtractorTab(props: SofExtractorTabProps) {
     const portText = summary.port_name || (summary as any).port || summary.terminal;
     if (portText) payload.port_name = portText;
 
-    const laycanStart = summary.laycan_start || summary.laycanStart;
-    const laycanEnd = summary.laycan_end || summary.laycanEnd;
+    const laycanStart = (summary as any).laycan_start || (summary as any).laycanStart;
+    const laycanEnd = (summary as any).laycan_end || (summary as any).laycanEnd;
     if (laycanStart) payload.laycan_start = laycanStart;
     if (laycanEnd) payload.laycan_end = laycanEnd;
 
-    const op = summary.operation_type || summary.activity;
+    const op = summary.operation_type || (summary as any).activity;
     if (op && typeof op === "string") {
       const lower = op.toLowerCase();
       if (lower.includes("dis")) payload.operation_type = "discharge";
