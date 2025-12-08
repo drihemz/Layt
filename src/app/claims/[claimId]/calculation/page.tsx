@@ -1362,6 +1362,8 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   const [selectionComment, setSelectionComment] = useState("");
   const [selectionNotes, setSelectionNotes] = useState<Record<string, { tag?: string; comment?: string }>>({});
   const storageKey = useMemo(() => (claim ? `laytime-selections-${claim.id}` : ""), [claim?.id]);
+  const MANUAL_PREFIX_DED = "[DED]";
+  const MANUAL_PREFIX_ADD = "[ADD]";
 
   useEffect(() => {
     if (!storageKey) return;
@@ -1405,7 +1407,39 @@ export default function CalculationPage({ params }: { params: { claimId: string 
         }
         setClaim(json.claim);
         setClaimForm(json.claim);
-        setEvents(json.events || []);
+        // Split persisted manual additions/deductions (prefixed) from base events
+        const parsedEvents: EventRow[] = json.events || [];
+        const manualAdds: EventRow[] = [];
+        const manualDeds: EventRow[] = [];
+        const notes: Record<string, { tag?: string; comment?: string }> = {};
+        const base: EventRow[] = [];
+        parsedEvents.forEach((ev: any) => {
+          const name: string = ev.deduction_name || "";
+          const isAdd = name.startsWith(MANUAL_PREFIX_ADD);
+          const isDed = name.startsWith(MANUAL_PREFIX_DED);
+          if (isAdd || isDed) {
+            const cleaned = name.replace(isAdd ? MANUAL_PREFIX_ADD : MANUAL_PREFIX_DED, "").trim();
+            const [tagPart, commentPart] = cleaned.split("|").map((s) => s?.trim()).filter(Boolean);
+            const span: EventRow = {
+              ...ev,
+              deduction_name: tagPart || cleaned || "Manual span",
+            };
+            if (commentPart) {
+              notes[ev.id] = { tag: span.deduction_name, comment: commentPart };
+            } else if (tagPart) {
+              notes[ev.id] = { tag: tagPart };
+            }
+            if (isAdd) manualAdds.push(span);
+            else manualDeds.push(span);
+          } else {
+            base.push(ev);
+          }
+        });
+        setSelectionNotes((prev) => ({ ...notes, ...prev }));
+        setAdditionEvents(manualAdds);
+        setDeductionEvents(manualDeds);
+        persistSelections(manualDeds, manualAdds, { ...selectionNotes, ...notes });
+        setEvents(base);
         if (json.terms) setTerms(json.terms);
         if (json.audit) setAudit(json.audit);
         if (json.claim?.port_calls) setPortCalls(json.claim.port_calls);
@@ -1599,6 +1633,11 @@ export default function CalculationPage({ params }: { params: { claimId: string 
     return opts;
   }, []);
 
+  const dedStartSet = useMemo(() => new Set(deductionEvents.map((d) => d.from_datetime)), [deductionEvents]);
+  const dedEndSet = useMemo(() => new Set(deductionEvents.map((d) => d.to_datetime || d.from_datetime)), [deductionEvents]);
+  const addStartSet = useMemo(() => new Set(additionEvents.map((d) => d.from_datetime)), [additionEvents]);
+  const addEndSet = useMemo(() => new Set(additionEvents.map((d) => d.to_datetime || d.from_datetime)), [additionEvents]);
+
   const clearSelection = () => {
     setSelectionStart(null);
     setSelectionEnd(null);
@@ -1641,28 +1680,56 @@ export default function CalculationPage({ params }: { params: { claimId: string 
       port_call_id: startEv.port_call_id,
       port_calls: startEv.port_calls,
     };
-    if (target === "deduction") {
-      setDeductionEvents((prev) => {
-        const next = [...prev, span];
-        persistSelections(next, additionEvents, selectionNotes);
-        return next;
-      });
-    } else {
-      setAdditionEvents((prev) => {
-        const next = [...prev, span];
-        persistSelections(deductionEvents, next, selectionNotes);
-        return next;
-      });
-    }
-    if (tag || comment) {
-      setSelectionNotes((prev) => {
-        const next = { ...prev, [spanId]: { tag: tag || prev[spanId]?.tag, comment: comment || prev[spanId]?.comment } };
-        persistSelections(deductionEvents, additionEvents, next);
-        return next;
-      });
-    } else {
-      persistSelections();
-    }
+    const storeSpan = (dbEvent?: EventRow) => {
+      const saved = dbEvent ? { ...span, ...dbEvent, deduction_name: spanName } : span;
+      if (target === "deduction") {
+        setDeductionEvents((prev) => {
+          const next = [...prev, saved];
+          persistSelections(next, additionEvents, selectionNotes);
+          return next;
+        });
+      } else {
+        setAdditionEvents((prev) => {
+          const next = [...prev, saved];
+          persistSelections(deductionEvents, next, selectionNotes);
+          return next;
+        });
+      }
+      if (tag || comment) {
+        setSelectionNotes((prev) => {
+          const next = { ...prev, [saved.id]: { tag: tag || prev[saved.id]?.tag, comment: comment || prev[saved.id]?.comment || comment } };
+          persistSelections(deductionEvents, additionEvents, next);
+          return next;
+        });
+      } else {
+        persistSelections();
+      }
+    };
+
+    // Persist to DB
+    const prefix = target === "addition" ? MANUAL_PREFIX_ADD : MANUAL_PREFIX_DED;
+    const storedName = `${prefix} ${spanName}${comment ? ` | ${comment}` : ""}`;
+    fetch(`/api/claims/${params.claimId}/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deduction_name: storedName,
+        from_datetime: from,
+        to_datetime: to,
+        rate_of_calculation: startEv.rate_of_calculation ?? 100,
+        port_call_id: startEv.port_call_id,
+      }),
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json?.event?.id) {
+          storeSpan(json.event as EventRow);
+        } else {
+          storeSpan();
+        }
+      })
+      .catch(() => storeSpan());
+
     clearSelection();
   };
 
@@ -2454,9 +2521,19 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                         variant="ghost"
                         className="text-red-600"
                         onClick={() => {
+                          // Delete persisted event if exists
+                          if (d.id && !d.id.startsWith("span-")) {
+                            fetch(`/api/claims/${params.claimId}/events`, {
+                              method: "DELETE",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ id: d.id }),
+                            }).catch(() => {});
+                          }
                           setDeductionEvents((prev) => {
                             const next = prev.filter((p) => p.id !== d.id);
-                            persistSelections(next, additionEvents, selectionNotes);
+                            const { [d.id]: _, ...restNotes } = selectionNotes;
+                            setSelectionNotes(restNotes);
+                            persistSelections(next, additionEvents, restNotes);
                             return next;
                           });
                         }}
@@ -2503,11 +2580,23 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                       (claimForm.nor_tendered_at || claim?.nor_tendered_at) &&
                       (ev.from_datetime === (claimForm.nor_tendered_at || claim?.nor_tendered_at) ||
                         ev.to_datetime === (claimForm.nor_tendered_at || claim?.nor_tendered_at));
+                    const labels: string[] = [];
+                    if (isLayStart) labels.push("Laytime Start");
+                    if (isLayEnd) labels.push("Laytime End");
+                    if (isNor) labels.push("NOR Tendered");
+                    const isDedAnchor = dedStartSet.has(ev.from_datetime) || dedEndSet.has(ev.from_datetime);
+                    const isAddAnchor = addStartSet.has(ev.from_datetime) || addEndSet.has(ev.from_datetime);
+                    if (dedStartSet.has(ev.from_datetime)) labels.push("Deduction Start");
+                    if (dedEndSet.has(ev.from_datetime)) labels.push("Deduction End");
+                    if (addStartSet.has(ev.from_datetime)) labels.push("Addition Start");
+                    if (addEndSet.has(ev.from_datetime)) labels.push("Addition End");
                     return (
                       <TableRow
                         key={ev.id}
                         className={`${isSelected ? "bg-emerald-50" : ""} ${
                           isLayStart || isLayEnd || isNor ? "border-l-4 border-emerald-500" : ""
+                        } ${isDedAnchor ? "border-l-4 border-rose-300" : ""} ${
+                          isAddAnchor ? "border-l-4 border-sky-300" : ""
                         }`}
                       >
                         <TableCell className="text-center">
@@ -2525,6 +2614,15 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                         <TableCell className="font-semibold">
                           <div className="text-sm text-slate-900">{ev.displayLabel}</div>
                           {ev.originalLabel && <div className="text-xs text-slate-500">Original: {ev.originalLabel}</div>}
+                          {labels.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {labels.map((lab, i) => (
+                                <span key={`${ev.id}-lab-${lab}-${i}`} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  {lab}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                           {(ev as any).canonical_event && (
                             <div className="text-[11px] text-emerald-700 mt-1">
                               {(ev as any).canonical_event}
@@ -2681,9 +2779,18 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                         variant="ghost"
                         className="text-red-600"
                         onClick={() => {
+                          if (d.id && !d.id.startsWith("span-")) {
+                            fetch(`/api/claims/${params.claimId}/events`, {
+                              method: "DELETE",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ id: d.id }),
+                            }).catch(() => {});
+                          }
                           setAdditionEvents((prev) => {
                             const next = prev.filter((p) => p.id !== d.id);
-                            persistSelections(deductionEvents, next, selectionNotes);
+                            const { [d.id]: _, ...restNotes } = selectionNotes;
+                            setSelectionNotes(restNotes);
+                            persistSelections(deductionEvents, next, restNotes);
                             return next;
                           });
                         }}
