@@ -113,7 +113,7 @@ export default function SofMapperAdminPage() {
         : [];
       setProposed(
         list.map((p) => ({
-          canonical: p.canonical || p.id,
+          canonical: p.canonical || (p as any).id || "",
           keywords: p.keywords || [],
           confidence: p.confidence ?? undefined,
           label: p.label,
