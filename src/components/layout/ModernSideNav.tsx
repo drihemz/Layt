@@ -36,6 +36,7 @@ const superAdminNavigation = [
   { name: "All Users", href: "/admin/users", icon: Users },
   { name: "Plans", href: "/admin/plans", icon: Settings },
   { name: "Invoices", href: "/admin/invoices", icon: FileText },
+  { name: "SOF Mapping", href: "/admin/sof-mapper", icon: FileText },
   { name: "Settings", href: "/admin/settings", icon: Settings },
 ];
 

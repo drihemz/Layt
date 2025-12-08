@@ -1,44 +1,9 @@
-export type SofExtractEvent = {
-  id?: string;
-  event?: string;
-  start?: string;
-  end?: string;
-  ratePercent?: number | null;
-  behavior?: string | null;
-  portCallName?: string | null;
-  notes?: string | null;
-  page?: number | null;
-  line?: number | null;
-  confidence?: number | null;
-};
+import { SofExtractResponse, SofEvent, SofSummary } from "@/types/sof";
 
-export type SofExtractSummary = {
-  port_name?: string | null;
-  terminal?: string | null;
-  vessel_name?: string | null;
-  imo?: string | null;
-  cargo_name?: string | null;
-  cargo_quantity?: string | number | null;
-  laycan_start?: string | null;
-  laycan_end?: string | null;
-  operation_type?: string | null;
-  raw?: any;
-};
-
-export type SofExtractResult = {
-  events: SofExtractEvent[];
-  filtered_out?: SofExtractEvent[];
-  warnings?: string[];
-  error?: string;
-  meta?: {
-    sourcePages?: number;
-    durationMs?: number;
-    filteredOutCount?: number;
-    confidenceFloor?: number;
-  };
-  summary?: SofExtractSummary | null;
-  raw?: any;
-};
+// Backwards-compatible aliases for existing imports.
+export type SofExtractEvent = SofEvent;
+export type SofExtractSummary = SofSummary;
+export type SofExtractResult = SofExtractResponse;
 
 /**
  * Calls the configured OCR/extraction service.

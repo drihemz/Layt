@@ -1,21 +1,14 @@
-#
-# SOF Extractor (server) snapshot
-#
-# Copy/paste these files to your OCR service (Render). This version includes CORS, better OCR defaults,
-# and notes on reliability.
-
-## `main.py`
-```python
 import io
 import re
-from typing import List, Dict, Tuple
+from typing import Dict, List, Tuple
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pdf2image import convert_from_bytes
 from PIL import Image
 import pytesseract
+from PyPDF2 import PdfReader
 
 app = FastAPI()
 
@@ -30,6 +23,35 @@ app.add_middleware(
 
 TIME_REGEX = re.compile(r"(\d{1,2}[:\.]\d{2})")
 DATE_REGEX = re.compile(r"(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})")
+
+
+def extract_pdf_text_events(content: bytes) -> Tuple[List[Dict], int]:
+    """Fast path: try native text extraction before OCR for digital PDFs."""
+    try:
+        reader = PdfReader(io.BytesIO(content))
+    except Exception:
+        return [], 0
+
+    events: List[Dict] = []
+    for page_idx, page in enumerate(reader.pages, start=1):
+        try:
+            text = page.extract_text() or ""
+        except Exception:
+            text = ""
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        for line_idx, line in enumerate(lines, start=1):
+            events.append(
+                {
+                    "event": line,
+                    "notes": line,
+                    "page": page_idx,
+                    "line": line_idx,
+                    "confidence": 1.0,  # text extraction is reliable for digital PDFs
+                    "bbox": None,
+                }
+            )
+    return events, len(reader.pages)
+
 
 def parse_line_groups(ocr: Dict) -> List[Dict]:
     grouped: Dict[Tuple[int, int, int], List[int]] = {}
@@ -49,34 +71,35 @@ def parse_line_groups(ocr: Dict) -> List[Dict]:
         x2 = y2 = -10**9
         confs = []
         for i in idxs:
-          words.append(ocr["text"][i])
-          x, y, w, h = ocr["left"][i], ocr["top"][i], ocr["width"][i], ocr["height"][i]
-          x1 = min(x1, x)
-          y1 = min(y1, y)
-          x2 = max(x2, x + w)
-          y2 = max(y2, y + h)
-          try:
-            c = float(ocr["conf"][i])
-            if c >= 0:
-              confs.append(c)
-          except Exception:
-            pass
+            words.append(ocr["text"][i])
+            x, y, w, h = ocr["left"][i], ocr["top"][i], ocr["width"][i], ocr["height"][i]
+            x1 = min(x1, x)
+            y1 = min(y1, y)
+            x2 = max(x2, x + w)
+            y2 = max(y2, y + h)
+            try:
+                c = float(ocr["conf"][i])
+                if c >= 0:
+                    confs.append(c)
+            except Exception:
+                pass
         text = " ".join(words).strip()
         if not text:
-          continue
+            continue
         bbox = {"x": x1, "y": y1, "width": x2 - x1, "height": y2 - y1}
         avg_conf = sum(confs) / len(confs) if confs else None
         lines.append(
-          {
-            "text": text,
-            "bbox": bbox,
-            "confidence": (avg_conf / 100) if avg_conf is not None else None,
-            "block": b,
-            "paragraph": p,
-            "line": l,
-          }
+            {
+                "text": text,
+                "bbox": bbox,
+                "confidence": (avg_conf / 100) if avg_conf is not None else None,
+                "block": b,
+                "paragraph": p,
+                "line": l,
+            }
         )
     return lines
+
 
 def ocr_images(images: List[Image.Image]):
     events = []
@@ -126,21 +149,56 @@ def ocr_images(images: List[Image.Image]):
             )
     return events, boxes
 
+
 @app.post("/extract")
 async def extract(file: UploadFile = File(...)):
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
+
+    is_pdf = file.filename.lower().endswith(".pdf")
+    if is_pdf:
+        text_events, page_count = extract_pdf_text_events(content)
+        if len(text_events) > 0:
+            return JSONResponse(
+                {
+                    "events": text_events,
+                    "boxes": [],
+                    "warnings": [],
+                    "meta": {"sourcePages": page_count or None, "durationMs": None},
+                }
+            )
+
     try:
-        if file.filename.lower().endswith(".pdf"):
-            # Higher DPI for better OCR layout; bump to 300 if needed
-            images = convert_from_bytes(content, fmt="png", dpi=250)
+        if is_pdf:
+            # Higher DPI for better OCR layout
+            images = convert_from_bytes(content, fmt="png", dpi=300)
         else:
             images = [Image.open(io.BytesIO(content))]
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to load file: {e}") from e
 
     events, boxes = ocr_images(images)
+    if len(events) == 0:
+        # Fallback: plain text extraction per page to avoid empty responses
+        for page_idx, img in enumerate(images, start=1):
+            try:
+                text = pytesseract.image_to_string(img, config="--oem 1 --psm 6", lang="eng")
+            except Exception:
+                text = ""
+            lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+            for line_idx, line_text in enumerate(lines, start=1):
+                events.append(
+                    {
+                        "event": line_text,
+                        "notes": line_text,
+                        "page": page_idx,
+                        "line": line_idx,
+                        "confidence": None,
+                        "bbox": None,
+                    }
+                )
+
     return JSONResponse(
         {
             "events": events,
@@ -149,39 +207,3 @@ async def extract(file: UploadFile = File(...)):
             "meta": {"sourcePages": len(images), "durationMs": None},
         }
     )
-```
-
-## `requirements.txt`
-```
-fastapi
-uvicorn[standard]
-pdf2image
-pillow
-pytesseract
-```
-
-## `Dockerfile` (sample)
-```Dockerfile
-FROM python:3.11-slim
-
-# System deps: poppler for pdf2image, tesseract for OCR
-RUN apt-get update && apt-get install -y \
-    poppler-utils \
-    tesseract-ocr \
-    tesseract-ocr-eng \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-Notes:
-- For images, Tesseract is required. For PDFs, `pdf2image` needs poppler.
-- OCR defaults: DPI 250 (raise to 300 if scans are faint), `--oem 1 --psm 6`, `lang="eng"`; add other language packs as needed.
-- Enable CORS so browsers can call the service.
-- Parser-side (in the app) can normalize dates, attach end-dates, and keep low-confidence rows flagged instead of dropping to avoid missing events.
-- Current parser extras: dotted/ordinal date parsing (`22.01.2017`, `April 22nd 2024`), default date context pre-scan, header vs timeline separation (vessel/terminal/cargo), and longer API/batch timeouts (10 minutes) to handle large scans.

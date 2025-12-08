@@ -62,8 +62,8 @@ export default function SofBatchUpload() {
         const form = new FormData();
         form.append("file", file);
         const controller = new AbortController();
-        // Allow up to 5 minutes per file to avoid aborting large scans
-        const id = setTimeout(() => controller.abort(), 300_000);
+        // Allow up to 10 minutes per file to avoid aborting large scans
+        const id = setTimeout(() => controller.abort(), 600_000);
 
         const res = await fetch(normalizedEndpoint, {
           method: "POST",
@@ -93,7 +93,7 @@ export default function SofBatchUpload() {
         current.raw = json;
       } catch (err: any) {
         current.status = "error";
-        current.message = err?.message || "Failed";
+        current.message = err?.name === "AbortError" ? "Timed out (10 minutes)" : err?.message || "Failed";
       }
       setResults([
         ...updated,

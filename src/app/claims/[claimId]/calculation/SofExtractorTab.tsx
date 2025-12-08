@@ -666,6 +666,16 @@ export default function SofExtractorTab(props: SofExtractorTabProps) {
                               {typeof ev.confidence === "number" && (
                                 <span className="ml-2 text-[10px] text-slate-500">({Math.round(ev.confidence * 100)}%)</span>
                               )}
+                              {ev.canonical_event && (
+                                <span className="ml-2 inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
+                                  {ev.canonical_event}
+                                  {typeof ev.canonical_confidence === "number" && (
+                                    <span className="ml-1 text-[9px] text-emerald-600">
+                                      ({Math.round(ev.canonical_confidence * 100)}%)
+                                    </span>
+                                  )}
+                                </span>
+                              )}
                             </>
                           )}
                           {pageVal && <p className="text-[10px] text-slate-500 mt-0.5">Page {pageVal}</p>}

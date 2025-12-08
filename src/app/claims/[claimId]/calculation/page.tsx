@@ -26,10 +26,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Plus } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { SofExtractEvent, SofExtractResult } from "@/lib/sof-extractor";
+import { canonicalMappings } from "@/lib/sof-mapper";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 // Sof extractor tab extracted to a standalone client component to avoid parse issues with inline definitions.
 import SofExtractorTab from "./SofExtractorTab";
 
@@ -329,10 +332,14 @@ function buildStatementSnapshot({
   claim,
   events,
   siblings,
+  manualDeductions = [],
+  manualAdditions = [],
 }: {
   claim: Claim;
   events: EventRow[];
   siblings?: SiblingSummary[];
+  manualDeductions?: EventRow[];
+  manualAdditions?: EventRow[];
 }) {
   const scopeAllows = (activity?: string | null) => {
     if (!claim.reversible_scope || claim.reversible_scope === "all_ports") return true;
@@ -346,7 +353,7 @@ function buildStatementSnapshot({
   const allPorts = claim.port_calls || [];
   const scopedPorts = allPorts.filter((pc) => scopeAllows(pc.activity));
 
-  const scopedEvents = events.filter((ev) => {
+  const isInScope = (ev: EventRow) => {
     if (!claim.reversible) {
       if (claim.port_call_id) {
         return ev.port_call_id === claim.port_call_id || !ev.port_call_id;
@@ -359,14 +366,39 @@ function buildStatementSnapshot({
     if (claim.reversible_scope === "load_only") return act === "load";
     if (claim.reversible_scope === "discharge_only") return act === "discharge";
     return true;
-  });
+  };
+
+  const scopedEvents = events.filter(isInScope);
+  const scopedManualDeductions = manualDeductions.filter(isInScope);
+  const scopedManualAdditions = manualAdditions.filter(isInScope);
 
   const deductionsByPort: Record<string, number> = {};
+  const addHours = (key: string, hours: number) => {
+    deductionsByPort[key] = (deductionsByPort[key] || 0) + hours;
+  };
+
   scopedEvents.forEach((ev) => {
     const key = ev.port_call_id || "unassigned";
-    deductionsByPort[key] = (deductionsByPort[key] || 0) + (ev.time_used || 0);
+    addHours(key, ev.time_used || 0);
   });
-  const totalDeductionsAll = Object.values(deductionsByPort).reduce((a, b) => a + (b || 0), 0);
+  scopedManualDeductions.forEach((ev) => {
+    const key = ev.port_call_id || "unassigned";
+    addHours(key, ev.time_used || 0);
+  });
+  scopedManualAdditions.forEach((ev) => {
+    const key = ev.port_call_id || "unassigned";
+    addHours(key, -(ev.time_used || 0));
+  });
+
+  // clamp negative buckets to zero
+  Object.keys(deductionsByPort).forEach((k) => {
+    if (deductionsByPort[k] < 0) deductionsByPort[k] = 0;
+  });
+
+  const totalDeductionsAll = Math.max(
+    Object.values(deductionsByPort).reduce((a, b) => a + (b || 0), 0),
+    0
+  );
 
   const baseSpanHours = (() => {
     if (laytimeStart && laytimeEnd) {
@@ -440,9 +472,9 @@ function buildStatementSnapshot({
   const breakdown = (() => {
     if (!claim.reversible) {
       return (claim.port_calls || []).map((pc) => {
-        const used = scopedEvents
-          .filter((ev) => !ev.port_call_id || ev.port_call_id === pc.id)
-          .reduce((sum, ev) => sum + (ev.time_used || 0), 0);
+        const bucket = deductionsByPort[pc.id] || 0;
+        const used =
+          baseSpanHours > 0 ? Math.max(baseSpanHours - bucket, 0) : bucket;
         const allowed = pc.allowed_hours !== null && pc.allowed_hours !== undefined ? Number(pc.allowed_hours) : null;
         const overUnder = allowed !== null ? (allowed || 0) - used : null;
         return {
@@ -451,7 +483,7 @@ function buildStatementSnapshot({
           activity: pc.activity || "",
           allowed,
           used,
-          deductions: used,
+          deductions: bucket,
           base: baseSpanHours,
           overUnder,
           inScope: true,
@@ -490,8 +522,9 @@ function buildStatementSnapshot({
       }
       const overUnder =
         sibling.allowed !== null && sibling.allowed !== undefined
-          ? (sibling.allowed || 0) - (sibling.used || 0)
+          ? (sibling.allowed || 0) - bucket
           : null;
+      const bucket = deductionsByPort[pc.id] || sibling.deductions || 0;
 
       return {
         id: pc.id,
@@ -499,8 +532,8 @@ function buildStatementSnapshot({
         activity: pc.activity || "",
         allowed: sibling.allowed,
         base: sibling.base_hours,
-        deductions: sibling.deductions,
-        used: sibling.used,
+        deductions: bucket,
+        used: bucket,
         inScope: true,
         overUnder,
         note: undefined as string | undefined,
@@ -544,11 +577,15 @@ function Summary({
   claim,
   timeFormat,
   siblings,
+  manualDeductions = [],
+  manualAdditions = [],
 }: {
   events: EventRow[];
   claim: Claim;
   timeFormat: TimeFormat;
   siblings?: SiblingSummary[];
+  manualDeductions?: EventRow[];
+  manualAdditions?: EventRow[];
 }) {
   const [pooledIds, setPooledIds] = useState<string[]>([]);
   const [savingPool, setSavingPool] = useState(false);
@@ -577,20 +614,11 @@ function Summary({
     return true;
   };
 
-  const laytimeStart = claim.laytime_start ?? null;
-  const laytimeEnd = claim.laytime_end ?? null;
-  const allPorts = claim.port_calls || [];
-  // Ports in scope for reversible setting (used for totals/allowance)
-  const scopedPorts = allPorts.filter((pc) => scopeAllows(pc.activity));
-  const portsForTotals = scopedPorts.length > 0 ? scopedPorts : allPorts;
-
-  const scopedEvents = events.filter((ev) => {
-    // Non-reversible: only count events on this claim's port call (and allow untagged).
+  const isInScope = (ev: EventRow) => {
     if (!claim.reversible) {
       if (claim.port_call_id) {
         return ev.port_call_id === claim.port_call_id || !ev.port_call_id;
       }
-      // If no port_call_id is set on the claim, keep untagged events only.
       return !ev.port_call_id;
     }
     const act = ev.port_calls?.activity;
@@ -599,14 +627,28 @@ function Summary({
     if (claim.reversible_scope === "load_only") return act === "load";
     if (claim.reversible_scope === "discharge_only") return act === "discharge";
     return true;
-  });
+  };
+
+  const laytimeStart = claim.laytime_start ?? null;
+  const laytimeEnd = claim.laytime_end ?? null;
+  const allPorts = claim.port_calls || [];
+  // Ports in scope for reversible setting (used for totals/allowance)
+  const scopedPorts = allPorts.filter((pc) => scopeAllows(pc.activity));
+  const portsForTotals = scopedPorts.length > 0 ? scopedPorts : allPorts;
+
+  const scopedEvents = events.filter(isInScope);
 
   const deductionsByPort: Record<string, number> = {};
-  scopedEvents.forEach((ev) => {
-    const key = ev.port_call_id || "unassigned";
-    deductionsByPort[key] = (deductionsByPort[key] || 0) + (ev.time_used || 0);
+  const addHours = (key: string, hours: number) => {
+    deductionsByPort[key] = (deductionsByPort[key] || 0) + hours;
+  };
+  scopedEvents.forEach((ev) => addHours(ev.port_call_id || "unassigned", ev.time_used || 0));
+  (manualDeductions || []).filter((ev) => isInScope(ev)).forEach((ev) => addHours(ev.port_call_id || "unassigned", ev.time_used || 0));
+  (manualAdditions || []).filter((ev) => isInScope(ev)).forEach((ev) => addHours(ev.port_call_id || "unassigned", -(ev.time_used || 0)));
+  Object.keys(deductionsByPort).forEach((k) => {
+    if (deductionsByPort[k] < 0) deductionsByPort[k] = 0;
   });
-  const totalDeductionsAll = Object.values(deductionsByPort).reduce((a, b) => a + (b || 0), 0);
+  const totalDeductionsAll = Math.max(Object.values(deductionsByPort).reduce((a, b) => a + (b || 0), 0), 0);
 
   const baseSpanHours = (() => {
     if (laytimeStart && laytimeEnd) {
@@ -959,6 +1001,8 @@ function StatementView({
   audit,
   timeFormat,
   siblings,
+  manualDeductions = [],
+  manualAdditions = [],
 }: {
   claim: Claim;
   events: EventRow[];
@@ -966,8 +1010,10 @@ function StatementView({
   audit: AuditRow[];
   timeFormat: TimeFormat;
   siblings?: SiblingSummary[];
+  manualDeductions?: EventRow[];
+  manualAdditions?: EventRow[];
 }) {
-  const snapshot = buildStatementSnapshot({ claim, events, siblings });
+  const snapshot = buildStatementSnapshot({ claim, events, siblings, manualDeductions, manualAdditions });
   const sortedEvents = [...snapshot.scopedEvents].sort(
     (a, b) => new Date(a.from_datetime).getTime() - new Date(b.from_datetime).getTime()
   );
@@ -1306,6 +1352,15 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   const [quickEditOpen, setQuickEditOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"workspace" | "statement" | "sof">("workspace");
   const [, setSofSummaryStatus] = useState<string | null>(null);
+  const [selectionStart, setSelectionStart] = useState<number | null>(null);
+  const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
+  const [deductionEvents, setDeductionEvents] = useState<EventRow[]>([]);
+  const [additionEvents, setAdditionEvents] = useState<EventRow[]>([]);
+  const [selectionMode, setSelectionMode] = useState<"deduction" | "addition" | null>(null);
+  const [selectionConfirmOpen, setSelectionConfirmOpen] = useState(false);
+  const [selectionTag, setSelectionTag] = useState("");
+  const [selectionComment, setSelectionComment] = useState("");
+  const [selectionNotes, setSelectionNotes] = useState<Record<string, { tag?: string; comment?: string }>>({});
 
   useEffect(() => {
     async function load() {
@@ -1470,8 +1525,128 @@ export default function CalculationPage({ params }: { params: { claimId: string 
     });
   }, [events, claim?.reversible, claim?.reversible_scope]);
 
+  type TimelineRow = EventRow & { displayLabel: string; originalLabel?: string | null; part?: "start" | "end" };
+  const timelineEvents: TimelineRow[] = useMemo(() => {
+    const expanded: TimelineRow[] = [];
+    enhancedEvents.forEach((ev) => {
+      const hasEnd = ev.to_datetime && ev.to_datetime !== ev.from_datetime;
+      const baseLabel = ev.deduction_name || ev.event || "Event";
+      if (hasEnd) {
+        expanded.push({
+          ...ev,
+          id: `${ev.id}-start`,
+          displayLabel: `${baseLabel} (start)`,
+          originalLabel: ev.event || ev.deduction_name,
+          part: "start",
+          to_datetime: ev.from_datetime,
+        });
+        expanded.push({
+          ...ev,
+          id: `${ev.id}-end`,
+          displayLabel: `${baseLabel} (end)`,
+          originalLabel: ev.event || ev.deduction_name,
+          part: "end",
+          from_datetime: ev.to_datetime,
+        });
+      } else {
+        expanded.push({
+          ...ev,
+          displayLabel: baseLabel,
+          originalLabel: ev.event || ev.deduction_name,
+        });
+      }
+    });
+    return expanded.sort((a, b) => {
+      const aTime = a.from_datetime ? new Date(a.from_datetime).getTime() : 0;
+      const bTime = b.from_datetime ? new Date(b.from_datetime).getTime() : 0;
+      return aTime - bTime;
+    });
+  }, [enhancedEvents]);
+
+  const canonicalOptions = useMemo(() => {
+    const opts = canonicalMappings.map((c) => ({ id: c.canonical, label: c.canonical }));
+    return opts;
+  }, []);
+
+  const clearSelection = () => {
+    setSelectionStart(null);
+    setSelectionEnd(null);
+    setSelectionMode(null);
+    setSelectionTag("");
+    setSelectionComment("");
+    setSelectionConfirmOpen(false);
+  };
+
+  const selectedRangeIds = useMemo(() => {
+    if (selectionStart === null || selectionEnd === null) return new Set<string>();
+    const start = Math.min(selectionStart, selectionEnd);
+    const end = Math.max(selectionStart, selectionEnd);
+    const ids = new Set<string>();
+    for (let i = start; i <= end; i++) {
+      const ev = timelineEvents[i];
+      if (ev?.id) ids.add(ev.id);
+    }
+    return ids;
+  }, [selectionStart, selectionEnd, timelineEvents]);
+
+  const applySelectionTo = (target: "deduction" | "addition", tag?: string, comment?: string) => {
+    if (selectionStart === null || selectionEnd === null) return;
+    const startIdx = Math.min(selectionStart, selectionEnd);
+    const endIdx = Math.max(selectionStart, selectionEnd);
+    const startEv = timelineEvents[startIdx];
+    const endEv = timelineEvents[endIdx];
+    if (!startEv || !endEv) return;
+    const spanId = `span-${target}-${startEv.id}-${endEv.id}-${Date.now()}`;
+    const spanName = tag || `${startEv.displayLabel} → ${endEv.displayLabel}`;
+    const from = startEv.from_datetime;
+    const to = endEv.to_datetime || endEv.from_datetime || from;
+    const span: EventRow = {
+      id: spanId,
+      deduction_name: spanName,
+      from_datetime: from,
+      to_datetime: to,
+      rate_of_calculation: startEv.rate_of_calculation ?? 100,
+      time_used: durationHours(from, to, startEv.rate_of_calculation ?? 100),
+      port_call_id: startEv.port_call_id,
+      port_calls: startEv.port_calls,
+    };
+    if (target === "deduction") {
+      setDeductionEvents((prev) => [...prev, span]);
+    } else {
+      setAdditionEvents((prev) => [...prev, span]);
+    }
+    if (tag || comment) {
+      setSelectionNotes((prev) => ({
+        ...prev,
+        [spanId]: { tag: tag || prev[spanId]?.tag, comment: comment || prev[spanId]?.comment },
+      }));
+    }
+    clearSelection();
+  };
+
   const handleClaimFieldChange = (field: keyof Claim, value: any) => {
     setClaimForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleStartSelection = (mode: "deduction" | "addition", idx: number) => {
+    if (selectionStart === idx && selectionMode === mode) {
+      clearSelection();
+      return;
+    }
+    const ev = timelineEvents[idx];
+    const defaultTag = ev?.canonical_event || ev?.deduction_name || "";
+    setSelectionMode(mode);
+    setSelectionStart(idx);
+    setSelectionEnd(idx);
+    setSelectionTag(defaultTag);
+    setSelectionComment("");
+    setSelectionConfirmOpen(false);
+  };
+
+  const handleRowClick = (idx: number) => {
+    if (selectionStart === null) return;
+    setSelectionEnd(idx);
+    setSelectionConfirmOpen(true);
   };
 
   const applySofSummaryToClaim = async (fields: Record<string, any>) => {
@@ -1788,6 +1963,8 @@ export default function CalculationPage({ params }: { params: { claimId: string 
         claim={{ ...claim, ...claimForm } as Claim}
         timeFormat={timeFormat}
         siblings={siblings}
+        manualDeductions={deductionEvents}
+        manualAdditions={additionEvents}
       />
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 space-y-4">
@@ -2207,46 +2384,235 @@ export default function CalculationPage({ params }: { params: { claimId: string 
           )}
         </div>
 
-        <div className="p-4 border border-slate-200 bg-white shadow-sm rounded-xl">
-          <div className="flex items-center gap-2 mb-3">
+        <div className="p-4 border border-slate-200 bg-white shadow-sm rounded-xl space-y-3">
+          <div className="flex items-center gap-2">
             <CalendarIcon className="w-4 h-4 text-slate-500" />
             <p className="text-sm font-semibold text-slate-700">Statement of Facts Timeline</p>
           </div>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Event</TableHead>
-                  <TableHead>From</TableHead>
-                  <TableHead>To</TableHead>
-                  <TableHead>Rate (%)</TableHead>
-                  <TableHead>Adjusted</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {enhancedEvents.length === 0 && (
+          <p className="text-xs text-slate-500">
+            Two-click flow: click a left handle to start a deduction or a right handle to start an addition, then click the end row. A dialog will let you pick the mapped event, comment, and whether to count or deduct. Use the 3-dot menu for laytime/load markers, edit, or delete.
+          </p>
+          <div className="grid lg:grid-cols-3 gap-3">
+            <div className="border border-slate-200 rounded-lg bg-slate-50 p-3 max-h-[360px] overflow-y-auto">
+              <p className="text-sm font-semibold text-slate-800 mb-2">Deductions</p>
+              {deductionEvents.length === 0 ? (
+                <p className="text-xs text-slate-500">No deductions selected.</p>
+              ) : (
+                <div className="space-y-2">
+                  {deductionEvents.map((d) => (
+                    <div key={`ded-${d.id}`} className="flex items-center justify-between text-sm">
+                      <div className="flex flex-col">
+                        <span className="text-slate-800">{selectionNotes[d.id]?.tag || d.deduction_name}</span>
+                        {selectionNotes[d.id]?.comment && (
+                          <span className="text-xs text-slate-500">{selectionNotes[d.id]?.comment}</span>
+                        )}
+                        <span className="text-[11px] text-slate-500">
+                          {formatDate(d.from_datetime)}{d.to_datetime ? ` → ${formatDate(d.to_datetime)}` : ""}
+                        </span>
+                        <span className="text-[11px] text-rose-600">Deducted</span>
+                      </div>
+                      <Button size="xs" variant="ghost" className="text-red-600" onClick={() => setDeductionEvents((prev) => prev.filter((p) => p.id !== d.id))}>
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="lg:col-span-1 border border-slate-200 rounded-lg overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-sm text-gray-500 py-6">
-                      No events yet. Add your first SOF event.
-                    </TableCell>
+                    <TableHead className="w-10 text-center">(-)</TableHead>
+                    <TableHead>Event</TableHead>
+                    <TableHead>Timestamp</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                )}
-                {enhancedEvents.map((ev) => (
-                  <TableRow key={ev.id}>
-                    <TableCell className="font-semibold">{ev.deduction_name}</TableCell>
-                    <TableCell>{formatDate(ev.from_datetime)}</TableCell>
-                    <TableCell>{formatDate(ev.to_datetime)}</TableCell>
-                    <TableCell>{ev.rate_of_calculation}%</TableCell>
-                    <TableCell>{formatHours(ev.time_used || 0, timeFormat)}</TableCell>
-                    <TableCell className="text-right space-x-2">
-                      <Button size="sm" variant="ghost" onClick={() => setEditingEvent(ev)}>Edit</Button>
-                      <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleDelete(ev.id)}>Delete</Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {timelineEvents.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-sm text-gray-500 py-6">
+                        No events yet. Add your first SOF event.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {timelineEvents.map((ev, idx) => {
+                    const isSelected = selectedRangeIds.has(ev.id);
+                    const fromTs = formatDate(ev.from_datetime);
+                    const toTs = ev.to_datetime && ev.to_datetime !== ev.from_datetime ? formatDate(ev.to_datetime) : null;
+                    return (
+                      <TableRow
+                        key={ev.id}
+                        className={isSelected ? "bg-emerald-50" : ""}
+                        onClick={() => handleRowClick(idx)}
+                      >
+                        <TableCell className="text-center">
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartSelection("deduction", idx);
+                            }}
+                          >
+                            -
+                          </Button>
+                        </TableCell>
+                        <TableCell className="font-semibold">
+                          <div className="text-sm text-slate-900">{ev.displayLabel}</div>
+                          {ev.originalLabel && <div className="text-xs text-slate-500">Original: {ev.originalLabel}</div>}
+                          {ev.canonical_event && (
+                            <div className="text-[11px] text-emerald-700 mt-1">
+                              {ev.canonical_event}
+                              {typeof ev.canonical_confidence === "number" ? ` (${Math.round(ev.canonical_confidence * 100)}%)` : ""}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-800">
+                          {fromTs}
+                          {toTs ? <div className="text-xs text-slate-500">→ {toTs}</div> : null}
+                        </TableCell>
+                        <TableCell className="text-right space-x-2 whitespace-nowrap">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                }}
+                              >
+                                ⋮
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              <DropdownMenuItem onClick={() => setEditingEvent(ev)}>Edit</DropdownMenuItem>
+                              <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(ev.id)}>
+                                Delete
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => handleClaimFieldChange("laytime_start", ev.from_datetime || ev.to_datetime || null)}>
+                                Set Laytime Start
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleClaimFieldChange("laytime_end", ev.to_datetime || ev.from_datetime || null)}>
+                                Set Laytime End
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  handleClaimFieldChange("loading_start_at", ev.from_datetime || ev.to_datetime || null);
+                                }}
+                              >
+                                Set Loading/Disch Start
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  handleClaimFieldChange("loading_end_at", ev.to_datetime || ev.from_datetime || ev.from_datetime || null);
+                                }}
+                              >
+                                Set Loading/Disch End
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              <div className="flex items-center justify-between px-3 py-2 border-t border-slate-200 text-xs text-slate-600">
+                <div className="space-x-2">
+                  <Button size="sm" variant="ghost" onClick={clearSelection}>
+                    Clear Selection
+                  </Button>
+                </div>
+                <div>{selectedRangeIds.size} selected</div>
+              </div>
+            </div>
+            <Dialog open={selectionConfirmOpen} onOpenChange={(o) => (!o ? clearSelection() : setSelectionConfirmOpen(o))}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>
+                    Confirm {selectionMode === "deduction" ? "Deduction" : selectionMode === "addition" ? "Addition" : "Range"} (
+                    {selectedRangeIds.size} events)
+                  </DialogTitle>
+                  <DialogDescription>
+                    Pick the mapped event label and optional comment, then choose whether to count or deduct this range.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-slate-600">Mapped Event (type to search)</Label>
+                    <div>
+                      <Input
+                        list="canonical-event-options"
+                        value={selectionTag}
+                        onChange={(e) => setSelectionTag(e.target.value)}
+                        placeholder="Start typing..."
+                      />
+                      <datalist id="canonical-event-options">
+                        {canonicalOptions.map((opt) => (
+                          <option key={opt.id} value={opt.label} />
+                        ))}
+                      </datalist>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-slate-600">Comment (optional)</Label>
+                    <Textarea
+                      value={selectionComment}
+                      onChange={(e) => setSelectionComment(e.target.value)}
+                      placeholder="Notes for this range"
+                    />
+                  </div>
+                </div>
+                <DialogFooter className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      applySelectionTo("addition", selectionTag, selectionComment);
+                    }}
+                  >
+                    Count (Add)
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      applySelectionTo("deduction", selectionTag, selectionComment);
+                    }}
+                  >
+                    Deduct
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <div className="border border-slate-200 rounded-lg bg-slate-50 p-3 max-h-[360px] overflow-y-auto">
+              <p className="text-sm font-semibold text-slate-800 mb-2">Additions</p>
+              {additionEvents.length === 0 ? (
+                <p className="text-xs text-slate-500">No additions selected.</p>
+              ) : (
+                <div className="space-y-2">
+                  {additionEvents.map((d) => (
+                    <div key={`add-${d.id}`} className="flex items-center justify-between text-sm">
+                      <div className="flex flex-col">
+                        <span className="text-slate-800">{selectionNotes[d.id]?.tag || d.deduction_name}</span>
+                        {selectionNotes[d.id]?.comment && (
+                          <span className="text-xs text-slate-500">{selectionNotes[d.id]?.comment}</span>
+                        )}
+                        <span className="text-[11px] text-slate-500">
+                          {formatDate(d.from_datetime)}{d.to_datetime ? ` → ${formatDate(d.to_datetime)}` : ""}
+                        </span>
+                        <span className="text-[11px] text-emerald-600">Counted</span>
+                      </div>
+                      <Button size="xs" variant="ghost" className="text-red-600" onClick={() => setAdditionEvents((prev) => prev.filter((p) => p.id !== d.id))}>
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -2319,6 +2685,8 @@ export default function CalculationPage({ params }: { params: { claimId: string 
             audit={audit}
             timeFormat={timeFormat}
             siblings={siblings}
+            manualDeductions={deductionEvents}
+            manualAdditions={additionEvents}
           />
         </TabsContent>
 

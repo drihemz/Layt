@@ -119,6 +119,7 @@ This file tracks the development progress of the Laytime Platform. It is designe
 - [x] Sidebar hover-collapse: main nav now icon-only and expands on hover for more workspace.
 - [x] Sample OCR service (FastAPI) now returns per-line bounding boxes, page/line, confidence, and boxes array for future PDF overlays.
 - [x] pdf.js viewer: client-side pdf.js renderer added for SOF preview with bbox overlays; falls back to iframe when pdf.js is not available. Local assets expected in `public/pdfjs-dist/build/pdf.min.js` and `pdf.worker.min.js`.
+- [x] SOF extractor/parser hardening: dotted/ordinal date parsing (`22.01.2017`, `April 22nd 2024`), default date context pre-scan for timelines, cleaner header vs timeline separation (vessel/terminal/cargo), vessel suffix cleanup, and 10-minute API/batch timeouts to reduce aborted large scans. Batch7 shows clean timelines for structured PDFs; a few scans (e.g., HT UNITE, Taihakusan) still need OCR/log review.
 - [ ] Planned: deepen QC workflow (multi-step approvals, audit stamps), external/third-party sharing & validation, versioning/diffs, SOF parser + master SOF data, contract-driven auto-calc, AI assist, GDPR/retention/audit enhancements.
 - [ ] **Voyage Enhancements**
   - [x] Added port_calls table and API (ETA/ETD, activity, status, sequence).

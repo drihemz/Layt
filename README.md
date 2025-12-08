@@ -145,6 +145,16 @@ npm run dev
 
 ---
 
+## SOF OCR (self-hosted)
+
+- A FastAPI + Tesseract service lives in `ocr/`. It keeps PDF processing inside your infra.
+- Quick start with Docker: `docker compose -f docker-compose.ocr.yml up --build`
+- Or run locally: `cd ocr && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000`
+- The Next.js proxy `/api/sof-extract` defaults to `http://localhost:8000/extract`. Override with `SOF_OCR_ENDPOINT` if needed. Confidence floor is controlled by `SOF_CONFIDENCE_FLOOR` (default `0.35`).
+- Parser highlights: dotted/ordinal dates (e.g., `22.01.2017`, `April 22nd 2024`), default date context pre-scan, cleaner header vs timeline separation (vessel/terminal/cargo), and longer API/batch timeouts (10 minutes) to reduce aborted large scans.
+
+---
+
 ## Known Issues
 
 - **Build error with Tailwind custom CSS in `globals.css` and dynamic classes.**
