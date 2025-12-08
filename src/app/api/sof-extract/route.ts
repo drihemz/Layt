@@ -4,9 +4,9 @@ import { createServerClient } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 600;
+export const maxDuration = 300; // Vercel hobby limit
 
-const MAX_TIMEOUT_MS = 600_000;
+const MAX_TIMEOUT_MS = 295_000; // slightly under 300s to stay within limit
 
 const DEFAULT_OCR_ENDPOINT = "http://localhost:8000/extract";
 
