@@ -1361,6 +1361,37 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   const [selectionTag, setSelectionTag] = useState("");
   const [selectionComment, setSelectionComment] = useState("");
   const [selectionNotes, setSelectionNotes] = useState<Record<string, { tag?: string; comment?: string }>>({});
+  const storageKey = useMemo(() => (claim ? `laytime-selections-${claim.id}` : ""), [claim?.id]);
+
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.deductions) setDeductionEvents(parsed.deductions);
+      if (parsed?.additions) setAdditionEvents(parsed.additions);
+      if (parsed?.notes) setSelectionNotes(parsed.notes);
+    } catch {
+      // ignore corrupted storage
+    }
+  }, [storageKey]);
+
+  const persistSelections = (ded: EventRow[] = deductionEvents, add: EventRow[] = additionEvents, notes = selectionNotes) => {
+    if (!storageKey) return;
+    try {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          deductions: ded,
+          additions: add,
+          notes,
+        })
+      );
+    } catch {
+      // ignore storage failures
+    }
+  };
 
   useEffect(() => {
     async function load() {
@@ -1611,15 +1642,26 @@ export default function CalculationPage({ params }: { params: { claimId: string 
       port_calls: startEv.port_calls,
     };
     if (target === "deduction") {
-      setDeductionEvents((prev) => [...prev, span]);
+      setDeductionEvents((prev) => {
+        const next = [...prev, span];
+        persistSelections(next, additionEvents, selectionNotes);
+        return next;
+      });
     } else {
-      setAdditionEvents((prev) => [...prev, span]);
+      setAdditionEvents((prev) => {
+        const next = [...prev, span];
+        persistSelections(deductionEvents, next, selectionNotes);
+        return next;
+      });
     }
     if (tag || comment) {
-      setSelectionNotes((prev) => ({
-        ...prev,
-        [spanId]: { tag: tag || prev[spanId]?.tag, comment: comment || prev[spanId]?.comment },
-      }));
+      setSelectionNotes((prev) => {
+        const next = { ...prev, [spanId]: { tag: tag || prev[spanId]?.tag, comment: comment || prev[spanId]?.comment } };
+        persistSelections(deductionEvents, additionEvents, next);
+        return next;
+      });
+    } else {
+      persistSelections();
     }
     clearSelection();
   };
@@ -1629,8 +1671,10 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   };
 
   const handleStartSelection = (mode: "deduction" | "addition", idx: number) => {
-    if (selectionStart === idx && selectionMode === mode) {
-      clearSelection();
+    // second click on same mode completes the range
+    if (selectionStart !== null && selectionMode === mode) {
+      setSelectionEnd(idx);
+      setSelectionConfirmOpen(true);
       return;
     }
     const ev = timelineEvents[idx];
@@ -1641,12 +1685,6 @@ export default function CalculationPage({ params }: { params: { claimId: string 
     setSelectionTag(defaultTag);
     setSelectionComment("");
     setSelectionConfirmOpen(false);
-  };
-
-  const handleRowClick = (idx: number) => {
-    if (selectionStart === null) return;
-    setSelectionEnd(idx);
-    setSelectionConfirmOpen(true);
   };
 
   const applySofSummaryToClaim = async (fields: Record<string, any>) => {
@@ -2411,7 +2449,18 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                         </span>
                         <span className="text-[11px] text-rose-600">Deducted</span>
                       </div>
-                      <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setDeductionEvents((prev) => prev.filter((p) => p.id !== d.id))}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600"
+                        onClick={() => {
+                          setDeductionEvents((prev) => {
+                            const next = prev.filter((p) => p.id !== d.id);
+                            persistSelections(next, additionEvents, selectionNotes);
+                            return next;
+                          });
+                        }}
+                      >
                         Remove
                       </Button>
                     </div>
@@ -2442,16 +2491,29 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                     const isSelected = selectedRangeIds.has(ev.id);
                     const fromTs = formatDate(ev.from_datetime);
                     const toTs = ev.to_datetime && ev.to_datetime !== ev.from_datetime ? formatDate(ev.to_datetime) : null;
+                    const isLayStart =
+                      (claimForm.laytime_start || claim?.laytime_start) &&
+                      (ev.from_datetime === (claimForm.laytime_start || claim?.laytime_start) ||
+                        ev.to_datetime === (claimForm.laytime_start || claim?.laytime_start));
+                    const isLayEnd =
+                      (claimForm.laytime_end || claim?.laytime_end) &&
+                      (ev.from_datetime === (claimForm.laytime_end || claim?.laytime_end) ||
+                        ev.to_datetime === (claimForm.laytime_end || claim?.laytime_end));
+                    const isNor =
+                      (claimForm.nor_tendered_at || claim?.nor_tendered_at) &&
+                      (ev.from_datetime === (claimForm.nor_tendered_at || claim?.nor_tendered_at) ||
+                        ev.to_datetime === (claimForm.nor_tendered_at || claim?.nor_tendered_at));
                     return (
                       <TableRow
                         key={ev.id}
-                        className={isSelected ? "bg-emerald-50" : ""}
-                        onClick={() => handleRowClick(idx)}
+                        className={`${isSelected ? "bg-emerald-50" : ""} ${
+                          isLayStart || isLayEnd || isNor ? "border-l-4 border-emerald-500" : ""
+                        }`}
                       >
                         <TableCell className="text-center">
                           <Button
                             size="sm"
-                            variant="outline"
+                            variant={selectionStart === idx && selectionMode === "deduction" ? "secondary" : "outline"}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleStartSelection("deduction", idx);
@@ -2514,6 +2576,13 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                                 }}
                               >
                                 Set Loading/Disch End
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  handleClaimFieldChange("nor_tendered_at", ev.from_datetime || ev.to_datetime || null);
+                                }}
+                              >
+                                Set NOR Tendered
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -2607,7 +2676,18 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                         </span>
                         <span className="text-[11px] text-emerald-600">Counted</span>
                       </div>
-                      <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setAdditionEvents((prev) => prev.filter((p) => p.id !== d.id))}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600"
+                        onClick={() => {
+                          setAdditionEvents((prev) => {
+                            const next = prev.filter((p) => p.id !== d.id);
+                            persistSelections(deductionEvents, next, selectionNotes);
+                            return next;
+                          });
+                        }}
+                      >
                         Remove
                       </Button>
                     </div>
