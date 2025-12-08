@@ -320,8 +320,8 @@ function normalizeSofEvents(rawEvents: any[]): { events: SofEvent[]; summary: So
       const cleaned = summary.vessel_name.split(" - ")[0].trim();
       if (cleaned.length >= 3) summary.vessel_name = cleaned;
     }
-    if (!summary.flag && !timelineStarted && /islands|panama|liberia|bahamas/i.test(label)) {
-      summary.flag = label.trim();
+    if (!(summary as any).flag && !timelineStarted && /islands|panama|liberia|bahamas/i.test(label)) {
+      (summary as any).flag = label.trim();
     }
     if (lower.includes("imo")) {
       const m = label.match(/imo[:\s]*([0-9]{6,7})/i);

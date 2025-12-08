@@ -251,7 +251,7 @@ export default function SofMapperAdminPage() {
                         }}
                       >
                         <DialogTrigger asChild>
-                          <Button size="xs" variant="outline">
+                          <Button size="sm" variant="outline">
                             Edit
                           </Button>
                         </DialogTrigger>
@@ -316,7 +316,12 @@ export default function SofMapperAdminPage() {
                                   setDbMappings((prev) =>
                                     (prev || []).map((x) =>
                                       (x as any).canonical === canonicalId || (x as any).id === canonicalId
-                                        ? { ...x, label: editForm.label || canonicalId, keywords: kw, confidence: conf }
+                                        ? {
+                                            ...(x as any),
+                                            label: editForm.label || canonicalId,
+                                            keywords: (kw || []).map((k) => new RegExp(k, "i")),
+                                            confidence: conf,
+                                          }
                                         : x
                                     )
                                   );
@@ -333,9 +338,9 @@ export default function SofMapperAdminPage() {
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>
-                          <Button
-                            size="xs"
-                            variant="destructive"
+                      <Button
+                        size="sm"
+                        variant="destructive"
                             onClick={async () => {
                               if (!confirm(`Delete mapping ${canonicalId}?`)) return;
                               setDeleteLoading(canonicalId);

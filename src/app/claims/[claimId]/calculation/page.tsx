@@ -520,11 +520,11 @@ function buildStatementSnapshot({
           note: "Claim not created yet",
         };
       }
+      const bucket = deductionsByPort[pc.id] || sibling.deductions || 0;
       const overUnder =
         sibling.allowed !== null && sibling.allowed !== undefined
           ? (sibling.allowed || 0) - bucket
           : null;
-      const bucket = deductionsByPort[pc.id] || sibling.deductions || 0;
 
       return {
         id: pc.id,
@@ -1528,7 +1528,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   type TimelineRow = EventRow & { displayLabel: string; originalLabel?: string | null; part?: "start" | "end" };
   const timelineEvents: TimelineRow[] = useMemo(() => {
     const expanded: TimelineRow[] = [];
-    enhancedEvents.forEach((ev) => {
+    enhancedEvents.forEach((ev: any) => {
       const hasEnd = ev.to_datetime && ev.to_datetime !== ev.from_datetime;
       const baseLabel = ev.deduction_name || ev.event || "Event";
       if (hasEnd) {
@@ -1634,7 +1634,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
       return;
     }
     const ev = timelineEvents[idx];
-    const defaultTag = ev?.canonical_event || ev?.deduction_name || "";
+    const defaultTag = (ev as any)?.canonical_event || ev?.deduction_name || "";
     setSelectionMode(mode);
     setSelectionStart(idx);
     setSelectionEnd(idx);
@@ -2411,7 +2411,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                         </span>
                         <span className="text-[11px] text-rose-600">Deducted</span>
                       </div>
-                      <Button size="xs" variant="ghost" className="text-red-600" onClick={() => setDeductionEvents((prev) => prev.filter((p) => p.id !== d.id))}>
+                      <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setDeductionEvents((prev) => prev.filter((p) => p.id !== d.id))}>
                         Remove
                       </Button>
                     </div>
@@ -2450,7 +2450,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                       >
                         <TableCell className="text-center">
                           <Button
-                            size="xs"
+                            size="sm"
                             variant="outline"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -2463,10 +2463,12 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                         <TableCell className="font-semibold">
                           <div className="text-sm text-slate-900">{ev.displayLabel}</div>
                           {ev.originalLabel && <div className="text-xs text-slate-500">Original: {ev.originalLabel}</div>}
-                          {ev.canonical_event && (
+                          {(ev as any).canonical_event && (
                             <div className="text-[11px] text-emerald-700 mt-1">
-                              {ev.canonical_event}
-                              {typeof ev.canonical_confidence === "number" ? ` (${Math.round(ev.canonical_confidence * 100)}%)` : ""}
+                              {(ev as any).canonical_event}
+                              {typeof (ev as any).canonical_confidence === "number"
+                                ? ` (${Math.round((ev as any).canonical_confidence * 100)}%)`
+                                : ""}
                             </div>
                           )}
                         </TableCell>
@@ -2605,7 +2607,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                         </span>
                         <span className="text-[11px] text-emerald-600">Counted</span>
                       </div>
-                      <Button size="xs" variant="ghost" className="text-red-600" onClick={() => setAdditionEvents((prev) => prev.filter((p) => p.id !== d.id))}>
+                      <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setAdditionEvents((prev) => prev.filter((p) => p.id !== d.id))}>
                         Remove
                       </Button>
                     </div>
