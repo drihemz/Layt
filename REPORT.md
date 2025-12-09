@@ -18,6 +18,7 @@
 - SOF highlights: Implemented client-side pdf.js renderer with aligned bbox overlays (when pdf.js loads); falls back to iframe if pdf.js fails. Local pdf.js assets expected at `public/pdfjs-dist/build/pdf.min.js` and `pdf.worker.min.js`.
 - SOF mapping/admin: Added Super Admin mapper page with DB-backed canonical events, edit/delete/import/export, unmapped labels capture/export, and seeded canonical enum list in migrations `027/028`. Timeline events show original SOF text with mapped tags.
 - Laytime workspace: Timeline selection now uses two-click start/end with mapped-event picker and comment; manual spans create single additions/deductions and feed totals (used/over-under/despatch/demurrage). Events with start/end are split into start/end rows for precise anchoring.
+- Attachments panel moved to sit directly below Claim Details; Add Event form now above the SOF timeline and defaults to 100% rate (percent is chosen in the selection modal instead).
 
 ## Migrations
 - `020_qc_and_comments.sql`: QC fields, `claim_comments`.

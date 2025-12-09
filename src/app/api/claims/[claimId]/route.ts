@@ -42,6 +42,7 @@ const updatableFields = [
   "operation_type",
   "port_name",
   "country",
+  "cargo_quantity",
   "load_discharge_rate",
   "load_discharge_rate_unit",
   "fixed_rate_duration_hours",
@@ -143,6 +144,18 @@ export async function PUT(
     updatableFields.forEach((field) => {
       if (field in body) payload[field] = body[field];
     });
+
+    // If cargo_quantity is provided, persist it on the voyage (not stored on claim)
+    if (body.cargo_quantity !== undefined && existing.voyage_id) {
+      const { error: cargoUpdateError } = await supabase
+        .from("voyages")
+        .update({ cargo_quantity: body.cargo_quantity })
+        .eq("id", existing.voyage_id);
+      if (cargoUpdateError) {
+        console.error("Failed to update cargo_quantity on voyage", cargoUpdateError);
+        return NextResponse.json({ error: cargoUpdateError.message }, { status: 500 });
+      }
+    }
 
     // Restrict QC edits when a reviewer is assigned (unless super_admin or the assigned reviewer)
     const existingClaim: any = existing;

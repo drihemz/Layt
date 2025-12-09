@@ -209,7 +209,6 @@ function AddEventForm({
   const [deduction, setDeduction] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [rate, setRate] = useState(100);
   const [error, setError] = useState<string | null>(null);
   const [portCallId, setPortCallId] = useState<string>("none");
 
@@ -218,13 +217,11 @@ function AddEventForm({
       setDeduction(editing.deduction_name);
       setFrom(toInputValue(editing.from_datetime));
       setTo(toInputValue(editing.to_datetime));
-      setRate(editing.rate_of_calculation);
       setPortCallId(editing.port_call_id || "none");
     } else {
       setDeduction("");
       setFrom("");
       setTo("");
-      setRate(100);
       setPortCallId("none");
       if (claimPortCallId) setPortCallId(claimPortCallId);
     }
@@ -242,7 +239,7 @@ function AddEventForm({
         deduction_name: deduction,
         from_datetime: from,
         to_datetime: to,
-        rate_of_calculation: rate,
+        rate_of_calculation: editing.rate_of_calculation ?? 100,
         port_call_id: portCallId === "none" ? null : portCallId,
       });
     } else {
@@ -250,7 +247,7 @@ function AddEventForm({
         deduction_name: deduction,
         from_datetime: from,
         to_datetime: to,
-        rate_of_calculation: rate,
+        rate_of_calculation: 100,
         port_call_id: portCallId === "none" ? null : portCallId,
       });
     }
@@ -299,16 +296,6 @@ function AddEventForm({
             type="datetime-local"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label>Rate (%)</Label>
-          <Input
-            type="number"
-            value={rate}
-            onChange={(e) => setRate(Number(e.target.value))}
-            min={0}
-            max={200}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -1329,6 +1316,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   const router = useRouter();
   const [claim, setClaim] = useState<Claim | null>(null);
   const [claimForm, setClaimForm] = useState<Partial<Claim>>({});
+  const [cargoQty, setCargoQty] = useState<number | null>(null);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [terms, setTerms] = useState<{ id: string; name: string }[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -1361,6 +1349,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   const [selectionTag, setSelectionTag] = useState("");
   const [selectionComment, setSelectionComment] = useState("");
   const [selectionNotes, setSelectionNotes] = useState<Record<string, { tag?: string; comment?: string }>>({});
+  const [selectionPercent, setSelectionPercent] = useState<number>(100);
   const storageKey = useMemo(() => (claim ? `laytime-selections-${claim.id}` : ""), [claim?.id]);
   const MANUAL_PREFIX_DED = "[DED]";
   const MANUAL_PREFIX_ADD = "[ADD]";
@@ -1407,6 +1396,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
         }
         setClaim(json.claim);
         setClaimForm(json.claim);
+        setCargoQty(json.claim?.voyages?.cargo_quantity ?? null);
         // Split persisted manual additions/deductions (prefixed) from base events
         const parsedEvents: EventRow[] = json.events || [];
         const manualAdds: EventRow[] = [];
@@ -1637,6 +1627,14 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   const dedEndSet = useMemo(() => new Set(deductionEvents.map((d) => d.to_datetime || d.from_datetime)), [deductionEvents]);
   const addStartSet = useMemo(() => new Set(additionEvents.map((d) => d.from_datetime)), [additionEvents]);
   const addEndSet = useMemo(() => new Set(additionEvents.map((d) => d.to_datetime || d.from_datetime)), [additionEvents]);
+  const spanWindows = useMemo(
+    () =>
+      [
+        ...deductionEvents.map((d) => ({ from: new Date(d.from_datetime).getTime(), to: new Date(d.to_datetime || d.from_datetime).getTime(), type: "ded" })),
+        ...additionEvents.map((d) => ({ from: new Date(d.from_datetime).getTime(), to: new Date(d.to_datetime || d.from_datetime).getTime(), type: "add" })),
+      ].filter((w) => Number.isFinite(w.from) && Number.isFinite(w.to)),
+    [deductionEvents, additionEvents]
+  );
 
   const clearSelection = () => {
     setSelectionStart(null);
@@ -1675,8 +1673,8 @@ export default function CalculationPage({ params }: { params: { claimId: string 
       deduction_name: spanName,
       from_datetime: from,
       to_datetime: to,
-      rate_of_calculation: startEv.rate_of_calculation ?? 100,
-      time_used: durationHours(from, to, startEv.rate_of_calculation ?? 100),
+      rate_of_calculation: selectionPercent ?? startEv.rate_of_calculation ?? 100,
+      time_used: durationHours(from, to, selectionPercent ?? startEv.rate_of_calculation ?? 100),
       port_call_id: startEv.port_call_id,
       port_calls: startEv.port_calls,
     };
@@ -1716,7 +1714,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
         deduction_name: storedName,
         from_datetime: from,
         to_datetime: to,
-        rate_of_calculation: startEv.rate_of_calculation ?? 100,
+        rate_of_calculation: selectionPercent ?? startEv.rate_of_calculation ?? 100,
         port_call_id: startEv.port_call_id,
       }),
     })
@@ -1738,8 +1736,11 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   };
 
   const handleStartSelection = (mode: "deduction" | "addition", idx: number) => {
-    // second click on same mode completes the range
     if (selectionStart !== null && selectionMode === mode) {
+      if (selectionStart === idx) {
+        clearSelection();
+        return;
+      }
       setSelectionEnd(idx);
       setSelectionConfirmOpen(true);
       return;
@@ -1751,6 +1752,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
     setSelectionEnd(idx);
     setSelectionTag(defaultTag);
     setSelectionComment("");
+    setSelectionPercent(100);
     setSelectionConfirmOpen(false);
   };
 
@@ -1868,6 +1870,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
         claim_status: claimForm.claim_status || claim?.claim_status || null,
         // keep qc_status aligned with the single status field for consistency in API/db
         qc_status: claimForm.claim_status || claim?.claim_status || null,
+        cargo_quantity: cargoQty,
       };
       const res = await fetch(`/api/claims/${claim.id}`, {
         method: "PUT",
@@ -2100,6 +2103,15 @@ export default function CalculationPage({ params }: { params: { claimId: string 
             <Input
               value={claimForm.port_name || ""}
               onChange={(e) => handleClaimFieldChange("port_name", e.target.value)}
+            />
+          </div>
+          <div className="col-span-12 md:col-span-4 space-y-1">
+            <Label>Cargo Quantity</Label>
+            <Input
+              type="number"
+              value={cargoQty ?? ""}
+              onChange={(e) => setCargoQty(e.target.value ? Number(e.target.value) : null)}
+              placeholder="e.g. 51900"
             />
           </div>
           <div className="col-span-12 md:col-span-4 space-y-1">
@@ -2401,18 +2413,6 @@ export default function CalculationPage({ params }: { params: { claimId: string 
       </div>
 
       <div className="space-y-4">
-        <AddEventForm
-          onAdd={handleAdd}
-          onUpdate={handleUpdate}
-          editing={editingEvent}
-          clearEdit={() => setEditingEvent(null)}
-          loading={saving}
-          portCalls={portCalls}
-          claimPortCallId={claim.port_call_id}
-        />
-
-        <div className="border-t border-slate-200" />
-
         <div className="p-4 border border-slate-200 bg-white shadow-sm rounded-xl space-y-3">
           <div className="flex items-center justify-between">
             <div>
@@ -2489,6 +2489,20 @@ export default function CalculationPage({ params }: { params: { claimId: string 
           )}
         </div>
 
+        <div className="border-t border-slate-200" />
+
+        <AddEventForm
+          onAdd={handleAdd}
+          onUpdate={handleUpdate}
+          editing={editingEvent}
+          clearEdit={() => setEditingEvent(null)}
+          loading={saving}
+          portCalls={portCalls}
+          claimPortCallId={claim.port_call_id}
+        />
+
+        <div className="border-t border-slate-200" />
+
         <div className="p-4 border border-slate-200 bg-white shadow-sm rounded-xl space-y-3">
           <div className="flex items-center gap-2">
             <CalendarIcon className="w-4 h-4 text-slate-500" />
@@ -2511,6 +2525,9 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                         {selectionNotes[d.id]?.comment && (
                           <span className="text-xs text-slate-500">{selectionNotes[d.id]?.comment}</span>
                         )}
+                        <span className="text-[11px] text-slate-500">
+                          Rate: {d.rate_of_calculation ?? 100}%
+                        </span>
                         <span className="text-[11px] text-slate-500">
                           {formatDate(d.from_datetime)}{d.to_datetime ? ` → ${formatDate(d.to_datetime)}` : ""}
                         </span>
@@ -2590,6 +2607,8 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                     if (dedEndSet.has(ev.from_datetime)) labels.push("Deduction End");
                     if (addStartSet.has(ev.from_datetime)) labels.push("Addition Start");
                     if (addEndSet.has(ev.from_datetime)) labels.push("Addition End");
+                    const rowTs = new Date(ev.from_datetime).getTime();
+                    const inSpan = spanWindows.some((w) => rowTs >= w.from && rowTs <= w.to);
                     return (
                       <TableRow
                         key={ev.id}
@@ -2597,7 +2616,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                           isLayStart || isLayEnd || isNor ? "border-l-4 border-emerald-500" : ""
                         } ${isDedAnchor ? "border-l-4 border-rose-300" : ""} ${
                           isAddAnchor ? "border-l-4 border-sky-300" : ""
-                        }`}
+                        } ${inSpan ? "bg-gradient-to-r from-slate-50 to-slate-100" : ""}`}
                       >
                         <TableCell className="text-center">
                           <Button
@@ -2728,6 +2747,16 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                     </div>
                   </div>
                   <div className="space-y-1">
+                    <Label className="text-xs text-slate-600">Rate (%)</Label>
+                    <Input
+                      type="number"
+                      value={selectionPercent}
+                      min={0}
+                      max={200}
+                      onChange={(e) => setSelectionPercent(Number(e.target.value) || 0)}
+                    />
+                  </div>
+                  <div className="space-y-1">
                     <Label className="text-xs text-slate-600">Comment (optional)</Label>
                     <Textarea
                       value={selectionComment}
@@ -2769,6 +2798,9 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                         {selectionNotes[d.id]?.comment && (
                           <span className="text-xs text-slate-500">{selectionNotes[d.id]?.comment}</span>
                         )}
+                        <span className="text-[11px] text-slate-500">
+                          Rate: {d.rate_of_calculation ?? 100}%
+                        </span>
                         <span className="text-[11px] text-slate-500">
                           {formatDate(d.from_datetime)}{d.to_datetime ? ` → ${formatDate(d.to_datetime)}` : ""}
                         </span>

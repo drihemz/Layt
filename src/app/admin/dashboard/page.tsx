@@ -4,38 +4,46 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { ArrowUpRight } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 async function loadMetrics() {
-  const supabase = createServerClient();
-  const [
-    tenantsCount,
-    usersCount,
-    voyagesCount,
-    claimsCount,
-    invoices,
-  ] = await Promise.all([
-    supabase.from("tenants").select("id", { count: "exact", head: true }),
-    supabase.from("users").select("id", { count: "exact", head: true }),
-    supabase.from("voyages").select("id", { count: "exact", head: true }),
-    supabase.from("claims").select("id", { count: "exact", head: true }),
-    supabase.from("invoices").select("amount_cents,status"),
-  ]);
+  try {
+    const supabase = createServerClient();
+    const [
+      tenantsCount,
+      usersCount,
+      voyagesCount,
+      claimsCount,
+      invoices,
+    ] = await Promise.all([
+      supabase.from("tenants").select("id", { count: "exact", head: true }),
+      supabase.from("users").select("id", { count: "exact", head: true }),
+      supabase.from("voyages").select("id", { count: "exact", head: true }),
+      supabase.from("claims").select("id", { count: "exact", head: true }),
+      supabase.from("invoices").select("amount_cents,status"),
+    ]);
 
-  const invoiceData = invoices.data || [];
-  const totalDue = invoiceData
-    .filter((i) => i.status === "due" || i.status === "overdue")
-    .reduce((sum, i) => sum + (i.amount_cents || 0), 0);
-  const totalPaid = invoiceData
-    .filter((i) => i.status === "paid")
-    .reduce((sum, i) => sum + (i.amount_cents || 0), 0);
+    const invoiceData = invoices.data || [];
+    const totalDue = invoiceData
+      .filter((i) => i.status === "due" || i.status === "overdue")
+      .reduce((sum, i) => sum + (i.amount_cents || 0), 0);
+    const totalPaid = invoiceData
+      .filter((i) => i.status === "paid")
+      .reduce((sum, i) => sum + (i.amount_cents || 0), 0);
 
-  return {
-    tenants: tenantsCount.count || 0,
-    users: usersCount.count || 0,
-    voyages: voyagesCount.count || 0,
-    claims: claimsCount.count || 0,
-    totalDue,
-    totalPaid,
-  };
+    return {
+      tenants: tenantsCount.count || 0,
+      users: usersCount.count || 0,
+      voyages: voyagesCount.count || 0,
+      claims: claimsCount.count || 0,
+      totalDue,
+      totalPaid,
+    };
+  } catch (e) {
+    // Fallback to zeros if env/service key is missing during build
+    return { tenants: 0, users: 0, voyages: 0, claims: 0, totalDue: 0, totalPaid: 0 };
+  }
 }
 
 export default async function AdminDashboard() {
