@@ -32,7 +32,7 @@ import { CalendarIcon, Plus } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { SofExtractEvent, SofExtractResult } from "@/lib/sof-extractor";
 import { buildStatementSnapshot } from "@/lib/laytime-summary";
-import { canonicalMappings } from "@/lib/sof-mapper";
+import { canonicalMappings, mapCanonicalEvent } from "@/lib/sof-mapper";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 // Sof extractor tab extracted to a standalone client component to avoid parse issues with inline definitions.
 import SofExtractorTab from "./SofExtractorTab";
@@ -1134,14 +1134,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
   const persistSelections = (ded: EventRow[] = deductionEvents, add: EventRow[] = additionEvents, notes = selectionNotes) => {
     if (!storageKey) return;
     try {
-      localStorage.setItem(
-        storageKey,
-        JSON.stringify({
-          deductions: ded,
-          additions: add,
-          notes,
-        })
-      );
+      localStorage.setItem(storageKey, JSON.stringify({ deductions: ded, additions: add, notes }));
     } catch {
       // ignore storage failures
     }
@@ -1329,7 +1322,14 @@ export default function CalculationPage({ params }: { params: { claimId: string 
       const time_used =
         ev.time_used ??
         durationHours(ev.from_datetime, ev.to_datetime, ev.rate_of_calculation);
-      return { ...ev, time_used };
+      const label = ev.deduction_name || (ev as any).event || "";
+      const mapped = mapCanonicalEvent(label);
+      return {
+        ...ev,
+        time_used,
+        canonical_event: (ev as any).canonical_event || mapped.canonical,
+        canonical_confidence: (ev as any).canonical_confidence ?? mapped.confidence ?? null,
+      };
     });
     if (!claim?.reversible || !claim.reversible_scope || claim.reversible_scope === "all_ports") {
       return scopedEvents;
@@ -2360,10 +2360,21 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                       (claimForm.nor_tendered_at || claim?.nor_tendered_at) &&
                       (ev.from_datetime === (claimForm.nor_tendered_at || claim?.nor_tendered_at) ||
                         ev.to_datetime === (claimForm.nor_tendered_at || claim?.nor_tendered_at));
+                    const opsLabel = (claimForm.operation_type || claim?.operation_type || "").toLowerCase() === "discharge" ? "Discharge" : "Loading";
+                    const loadStartVal = claimForm.loading_start_at || claim?.loading_start_at;
+                    const loadEndVal = claimForm.loading_end_at || claim?.loading_end_at;
+                    const isLoadStart =
+                      loadStartVal &&
+                      (ev.from_datetime === loadStartVal || ev.to_datetime === loadStartVal);
+                    const isLoadEnd =
+                      loadEndVal &&
+                      (ev.from_datetime === loadEndVal || ev.to_datetime === loadEndVal);
                     const labels: string[] = [];
                     if (isLayStart) labels.push("Laytime Start");
                     if (isLayEnd) labels.push("Laytime End");
                     if (isNor) labels.push("NOR Tendered");
+                    if (isLoadStart) labels.push(`${opsLabel} Start`);
+                    if (isLoadEnd) labels.push(`${opsLabel} Completed`);
                     const isDedAnchor = dedStartSet.has(ev.from_datetime) || dedEndSet.has(ev.from_datetime);
                     const isAddAnchor = addStartSet.has(ev.from_datetime) || addEndSet.has(ev.from_datetime);
                     if (dedStartSet.has(ev.from_datetime)) labels.push("Deduction Start");
@@ -2376,7 +2387,7 @@ export default function CalculationPage({ params }: { params: { claimId: string 
                       <TableRow
                         key={ev.id}
                         className={`${isSelected ? "bg-emerald-50" : ""} ${
-                          isLayStart || isLayEnd || isNor ? "border-l-4 border-emerald-500" : ""
+                          isLayStart || isLayEnd || isNor || isLoadStart || isLoadEnd ? "border-l-4 border-emerald-500" : ""
                         } ${isDedAnchor ? "border-l-4 border-rose-300" : ""} ${
                           isAddAnchor ? "border-l-4 border-sky-300" : ""
                         } ${inSpan ? "bg-gradient-to-r from-slate-50 to-slate-100" : ""}`}
