@@ -285,16 +285,14 @@ function normalizeSofEvents(rawEvents: any[]): { events: SofEvent[]; summary: So
       const m = label.match(/port\s+of\s+(.+)/i);
       if (m) summary.port_name = m[1].trim();
     }
-    if (!summary.terminal && lower.includes("terminal")) {
-      const m = label.match(/terminal[:\-]?\s*([A-Za-z0-9 .\\/-]+)/i);
+    // Terminal / berth / jetty
+    if (!summary.terminal) {
+      const m = label.match(/(?:terminal|berth|jetty|wharf)[:\-]?\s*([A-Za-z0-9 .#\\/-]+)/i);
       if (m) summary.terminal = m[1].trim();
     }
-    // Capture terminal/berth lines, but ignore pure numbers or single words
-    if (!summary.terminal && /(berth|terminal)/i.test(label) && label.length < 120) {
+    if (!summary.terminal && /(berth|terminal|jetty|wharf)/i.test(label) && label.length < 120) {
       const parts = label.trim().split(/\s+/);
-      if (parts.length > 1) {
-        summary.terminal = label.trim();
-      }
+      if (parts.length > 1) summary.terminal = label.trim();
     }
     if (lower.startsWith("vessel") || lower.includes("vessel name")) {
       const m = label.match(/vessel(?:\s+name)?:\s*([A-Za-z0-9 _-]+)/i);
@@ -325,6 +323,9 @@ function normalizeSofEvents(rawEvents: any[]): { events: SofEvent[]; summary: So
     }
     if (lower.includes("imo")) {
       const m = label.match(/imo[:\s]*([0-9]{6,7})/i);
+      if (m) summary.imo = m[1];
+    } else if (!summary.imo) {
+      const m = label.match(/\b([0-9]{7})\b/);
       if (m) summary.imo = m[1];
     }
     if (lower.startsWith("cargo") || lower.includes("cargo name")) {

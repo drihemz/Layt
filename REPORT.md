@@ -19,6 +19,9 @@
 - SOF mapping/admin: Added Super Admin mapper page with DB-backed canonical events, edit/delete/import/export, unmapped labels capture/export, and seeded canonical enum list in migrations `027/028`. Timeline events show original SOF text with mapped tags.
 - Laytime workspace: Timeline selection now uses two-click start/end with mapped-event picker and comment; manual spans create single additions/deductions and feed totals (used/over-under/despatch/demurrage). Events with start/end are split into start/end rows for precise anchoring.
 - Attachments panel moved to sit directly below Claim Details; Add Event form now above the SOF timeline and defaults to 100% rate (percent is chosen in the selection modal instead).
+- Laytime summary helper: factored shared `buildStatementSnapshot` into `src/lib/laytime-summary.ts` and calculation page now consumes it (same logic, reusable for tests and future statement renders). If there are zero events/additions/deductions, Used time now defaults to the full laytime window; additions still correctly extend used time (no clamping when they exceed deductions). Laytime span now uses a “naive” date diff (ignores timezone offsets) to match the user-entered start/end values exactly. Auto deductions from events are currently disabled; only manual deductions/additions affect used time.
+- SOF mapping: expanded canonical keywords (pilot station arrival variants, richer cargo ops start/stop/resume) to improve matches on noisy PDFs.
+- Tests: Added Vitest setup (`npm test`) with unit coverage for SOF parser/header + canonical mapping, and laytime summary math helper. (Note: `npm install` may be required to fetch vitest when network is available.)
 
 ## Migrations
 - `020_qc_and_comments.sql`: QC fields, `claim_comments`.

@@ -4,6 +4,10 @@
 # Copy/paste these files to your OCR service (Render). This version includes CORS, better OCR defaults,
 # and notes on reliability.
 
+## Local OCR/layout tip (image-heavy PDFs)
+- For scanned/image-heavy PDFs, run a local pass with `pdf2image` at 250–300 DPI, then `pytesseract.image_to_data` (`--oem 1 --psm 6`) to retain line layout. The `parse_line_groups` helper in this doc keeps per-line bboxes/confidence so you can overlay in the UI.
+- If text is still missing, try `psm 4` (sparse text) and/or deskew with Pillow before OCR.
+
 ## `main.py`
 ```python
 import io
