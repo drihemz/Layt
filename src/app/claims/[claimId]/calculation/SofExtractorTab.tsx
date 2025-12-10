@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SofExtractResult } from "@/lib/sof-extractor";
 
 export type SofExtractorTabProps = {
@@ -53,7 +54,6 @@ export default function SofExtractorTab(props: SofExtractorTabProps) {
   const [summaryStatus, setSummaryStatus] = useState<string | null>(null);
   const [pcStatus, setPcStatus] = useState<string | null>(null);
   const [pcLoading, setPcLoading] = useState(false);
-
   const portCalls = Array.isArray(claim?.port_calls) ? claim.port_calls : [];
   const filteredOutCount = (extracted as any)?.meta?.filteredOutCount || 0;
   const confidenceFloor = (extracted as any)?.meta?.confidenceFloor;
@@ -111,24 +111,36 @@ export default function SofExtractorTab(props: SofExtractorTabProps) {
   };
 
   const summary = extracted?.summary || null;
+  const [showEditHeader, setShowEditHeader] = useState(false);
+  const [editableSummary, setEditableSummary] = useState<any | null>(summary);
+  useEffect(() => {
+    if (summary) setEditableSummary(summary);
+  }, [summary]);
 
   const handleApplySummary = async () => {
-    if (!summary || !onApplySummary) return;
+    const s = editableSummary || summary;
+    if (!s || !onApplySummary) return;
     const payload: Record<string, any> = {};
-    const portText = summary.port_name || (summary as any).port || summary.terminal;
+    const portText = s.port_name || (s as any).port || s.terminal;
     if (portText) payload.port_name = portText;
 
-    const laycanStart = (summary as any).laycan_start || (summary as any).laycanStart;
-    const laycanEnd = (summary as any).laycan_end || (summary as any).laycanEnd;
+    const laycanStart = (s as any).laycan_start || (s as any).laycanStart;
+    const laycanEnd = (s as any).laycan_end || (s as any).laycanEnd;
     if (laycanStart) payload.laycan_start = laycanStart;
     if (laycanEnd) payload.laycan_end = laycanEnd;
 
-    const op = summary.operation_type || (summary as any).activity;
+    const op = s.operation_type || (s as any).activity;
     if (op && typeof op === "string") {
       const lower = op.toLowerCase();
       if (lower.includes("dis")) payload.operation_type = "discharge";
       else if (lower.includes("load")) payload.operation_type = "load";
     }
+
+    if (s.terminal) payload.terminal = s.terminal;
+    if (s.vessel_name) payload.vessel_name = s.vessel_name;
+    if (s.imo) payload.imo = s.imo;
+    if (s.cargo_name) payload.cargo_name = s.cargo_name;
+    if (s.cargo_quantity) payload.cargo_quantity = s.cargo_quantity;
 
     if (Object.keys(payload).length === 0) {
       setSummaryStatus("No mappable fields in SOF header.");
@@ -359,46 +371,176 @@ export default function SofExtractorTab(props: SofExtractorTabProps) {
               <p className="text-[11px] text-emerald-900/80">Review and apply to claim header if correct.</p>
             </div>
             {onApplySummary && (
-              <button
-                type="button"
-                onClick={handleApplySummary}
-                className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100"
-              >
-                Apply to claim
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditHeader(true)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplySummary}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100"
+                >
+                  Apply to claim
+                </button>
+              </div>
             )}
           </div>
           <div className="grid md:grid-cols-4 gap-3 text-sm text-slate-900">
             <div>
               <p className="text-[11px] text-slate-600 uppercase tracking-wide">Port</p>
               <p className="font-semibold">
-                {summary.port_name || (summary as any).port || summary.terminal || "—"}
+                {(editableSummary || summary)?.port_name || (editableSummary as any)?.port || editableSummary?.terminal || summary.port_name || (summary as any).port || summary.terminal || "—"}
               </p>
-              {summary.terminal && <p className="text-[11px] text-slate-600 mt-1">Terminal: {summary.terminal}</p>}
+              {(editableSummary || summary)?.terminal && <p className="text-[11px] text-slate-600 mt-1">Terminal: {(editableSummary || summary)?.terminal}</p>}
             </div>
             <div>
               <p className="text-[11px] text-slate-600 uppercase tracking-wide">Vessel</p>
-              <p className="font-semibold">{summary.vessel_name || "—"}</p>
-              {summary.imo && <p className="text-[11px] text-slate-600 mt-1">IMO: {summary.imo}</p>}
+              <p className="font-semibold">{(editableSummary || summary)?.vessel_name || "—"}</p>
+              {(editableSummary || summary)?.imo && <p className="text-[11px] text-slate-600 mt-1">IMO: {(editableSummary || summary)?.imo}</p>}
             </div>
             <div>
               <p className="text-[11px] text-slate-600 uppercase tracking-wide">Cargo</p>
               <p className="font-semibold">
-                {summary.cargo_name || "—"}
-                {summary.cargo_quantity ? ` · ${summary.cargo_quantity}` : ""}
+                {(editableSummary || summary)?.cargo_name || "—"}
+                {(editableSummary || summary)?.cargo_quantity ? ` · ${(editableSummary || summary)?.cargo_quantity}` : ""}
               </p>
             </div>
             <div>
               <p className="text-[11px] text-slate-600 uppercase tracking-wide">Laycan</p>
               <p className="font-semibold">
-                {summary.laycan_start ? formatDate(summary.laycan_start) : "—"}
-                {summary.laycan_end ? ` → ${formatDate(summary.laycan_end)}` : ""}
+                {(editableSummary || summary)?.laycan_start ? formatDate((editableSummary || summary)?.laycan_start) : "—"}
+                {(editableSummary || summary)?.laycan_end ? ` → ${formatDate((editableSummary || summary)?.laycan_end)}` : ""}
               </p>
             </div>
           </div>
           {summaryStatus && <p className="text-[11px] text-slate-700">{summaryStatus}</p>}
         </div>
       )}
+
+      <Dialog open={showEditHeader} onOpenChange={setShowEditHeader}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit extracted header</DialogTitle>
+            <DialogDescription>Adjust the header fields before applying to the claim.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-600">Port</label>
+                <input
+                  className="w-full rounded border px-2 py-1 text-sm"
+                  value={(editableSummary || summary)?.port_name || ""}
+                  onChange={(e) =>
+                    setEditableSummary((prev: any) => ({ ...(prev || summary || {}), port_name: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600">Terminal</label>
+                <input
+                  className="w-full rounded border px-2 py-1 text-sm"
+                  value={(editableSummary || summary)?.terminal || ""}
+                  onChange={(e) =>
+                    setEditableSummary((prev: any) => ({ ...(prev || summary || {}), terminal: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-600">Vessel</label>
+                <input
+                  className="w-full rounded border px-2 py-1 text-sm"
+                  value={(editableSummary || summary)?.vessel_name || ""}
+                  onChange={(e) =>
+                    setEditableSummary((prev: any) => ({ ...(prev || summary || {}), vessel_name: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600">IMO</label>
+                <input
+                  className="w-full rounded border px-2 py-1 text-sm"
+                  value={(editableSummary || summary)?.imo || ""}
+                  onChange={(e) =>
+                    setEditableSummary((prev: any) => ({ ...(prev || summary || {}), imo: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-600">Cargo</label>
+                <input
+                  className="w-full rounded border px-2 py-1 text-sm"
+                  value={(editableSummary || summary)?.cargo_name || ""}
+                  onChange={(e) =>
+                    setEditableSummary((prev: any) => ({ ...(prev || summary || {}), cargo_name: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600">Cargo quantity</label>
+                <input
+                  className="w-full rounded border px-2 py-1 text-sm"
+                  value={(editableSummary || summary)?.cargo_quantity || ""}
+                  onChange={(e) =>
+                    setEditableSummary((prev: any) => ({ ...(prev || summary || {}), cargo_quantity: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-600">Laycan start</label>
+                <input
+                  className="w-full rounded border px-2 py-1 text-sm"
+                  value={(editableSummary || summary)?.laycan_start || ""}
+                  onChange={(e) =>
+                    setEditableSummary((prev: any) => ({ ...(prev || summary || {}), laycan_start: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600">Laycan end</label>
+                <input
+                  className="w-full rounded border px-2 py-1 text-sm"
+                  value={(editableSummary || summary)?.laycan_end || ""}
+                  onChange={(e) =>
+                    setEditableSummary((prev: any) => ({ ...(prev || summary || {}), laycan_end: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="mt-4">
+            <button
+              type="button"
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+              onClick={() => {
+                setEditableSummary(summary);
+                setShowEditHeader(false);
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100"
+              onClick={() => {
+                setShowEditHeader(false);
+                setSummaryStatus("Header updated, now apply to claim.");
+              }}
+            >
+              Save
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid md:grid-cols-3 gap-3">
         <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">

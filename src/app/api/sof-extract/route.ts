@@ -60,6 +60,8 @@ export async function POST(req: Request) {
 
     const normalized = normalizeSofPayload(json, { confidenceFloor });
     normalized.meta = { ...(normalized.meta || {}), confidenceFloor };
+    // include original OCR payload for debugging (kept lightweight)
+    normalized.raw = json.raw || json;
 
     // Best-effort: log unmapped labels to Supabase if service role key is present
     try {

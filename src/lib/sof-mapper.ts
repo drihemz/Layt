@@ -58,6 +58,7 @@ export const canonicalMappings: SofMapping[] = [
       /using loader/i,
       /loading operations commenced/i,
       /cargo operations commenced/i,
+      /loading resumed from stop/i,
     ],
   },
   {
@@ -70,6 +71,8 @@ export const canonicalMappings: SofMapping[] = [
       /suspended cargo/i,
       /cargo ops stopped/i,
       /cargo operations suspended/i,
+      /loading suspended/i,
+      /discharging suspended/i,
     ],
   },
   {
@@ -81,6 +84,8 @@ export const canonicalMappings: SofMapping[] = [
       /recommenced cargo/i,
       /restarted cargo ops/i,
       /cargo operations resumed/i,
+      /loading resumed/i,
+      /discharging resumed/i,
     ],
   },
   { canonical: "CARGO_OPS_COMPLETE", confidence: 0.75, keywords: [/completed loading/i, /completed discharging/i, /cargo completed/i, /finished cargo/i, /loading finish/i, /discharge finish/i] },

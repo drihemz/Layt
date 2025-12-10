@@ -31,7 +31,8 @@ const monthMap: Record<string, string> = {
 
 function parseDate(text: string): string | null {
   let cleaned = text.replace(/\s+/g, " ").replace(/-\s+/g, "-").replace(/\s+-/g, "-");
-  cleaned = cleaned.replace(/([A-Za-z])\s+([A-Za-z])/g, "$1$2");
+  cleaned = cleaned.replace(/(\d{1,2})(st|nd|rd|th)/gi, "$1"); // strip ordinals
+  const monthDayYear = cleaned.match(/([A-Za-z]{3,})\s*(\d{1,2})(?:st|nd|rd|th)?[, ]+\s*(\d{4})/);
   cleaned = cleaned
     .replace(/J\s*an/gi, "Jan")
     .replace(/F\s*eb/gi, "Feb")
@@ -55,13 +56,19 @@ function parseDate(text: string): string | null {
   const m =
     cleaned.match(/(\d{1,2})\s*[-/]\s*([A-Za-z]{3})[A-Za-z]*\s*[-/]\s*(\d{2,4})/) ||
     cleaned.match(/(\d{1,2})\s+([A-Za-z]{3})[A-Za-z]*\s+(\d{2,4})/) ||
-    cleaned.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);
+    cleaned.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})/) ||
+    monthDayYear;
   if (!m) return null;
-  const day = m[1].padStart(2, "0");
+  const day = (monthDayYear ? m[2] : m[1]).padStart(2, "0");
+  const monRaw = monthDayYear ? m[1] : m[2];
   const mon =
-    m[2] && isNaN(Number(m[2])) ? monthMap[m[2].toLowerCase()] : m[2] ? m[2].padStart(2, "0") : null;
+    monRaw && isNaN(Number(monRaw))
+      ? monthMap[monRaw.toLowerCase().slice(0, 3)]
+      : monRaw
+      ? monRaw.padStart(2, "0")
+      : null;
   if (!mon) return null;
-  let year = m[3];
+  let year = monthDayYear ? m[3] : m[3];
   if (year.length === 2) {
     year = Number(year) > 50 ? `19${year}` : `20${year}`;
   }
@@ -74,6 +81,15 @@ function parseTime(text: string): string | null {
   const hh = m[1].padStart(2, "0");
   const mm = m[2].padStart(2, "0");
   return `${hh}:${mm}`;
+}
+
+// Splits strings like "09:00E.O.S.P." into { time: "09:00", rest: "E.O.S.P." }
+function splitLeadingTime(text: string): { time: string; rest: string } | null {
+  const m = text.match(/^(\d{1,2}[:.]\d{2})\s*(.+)$/);
+  if (!m) return null;
+  const time = parseTime(m[1]);
+  if (!time) return null;
+  return { time, rest: m[2].trim() };
 }
 
 function parseDateRange(text: string): { start?: string | null; end?: string | null } {
@@ -116,7 +132,8 @@ function attachEndDate(from: string | null | undefined, to: string | null | unde
 }
 
 function parseQuantity(text: string): { qty: number; unit: string } | null {
-  const m = text.match(/(\d{1,3}(?:[.,]\d{3})*(?:\.\d+)?)\s*(mt|m\/t|tons|tonnes|t)?/i);
+  // Accept 4–6 digit numbers (e.g., 51900) or grouped with commas, plus decimal quantities.
+  const m = text.match(/(\d{1,3}(?:[.,]\d{3})+|\d{4,6})(?:\.\d+)?\s*(mt|m\/t|tons|tonnes|t)?/i);
   if (!m) return null;
   const num = parseFloat(m[1].replace(/,/g, ""));
   if (!Number.isFinite(num)) return null;
@@ -132,6 +149,7 @@ function mergeTableRows(rawEvents: any[]): any[] {
     const dateCurr = parseDate(labelCurr);
     const timeCurr = parseTime(labelCurr);
 
+    // Case: label on one line, date/time on following line
     if (!dateCurr && !timeCurr && labelCurr) {
       const next = rawEvents[i + 1];
       const nextLabel = (next?.event || (next as any)?.deduction_name || (next as any)?.notes || "").toString().trim();
@@ -161,6 +179,24 @@ function mergeTableRows(rawEvents: any[]): any[] {
           to_datetime: end,
         });
         i += consumed;
+        continue;
+      }
+    }
+
+    // Case: date/time on this line, description on next line
+    if (dateCurr && timeCurr && labelCurr && i + 1 < rawEvents.length) {
+      const next = rawEvents[i + 1];
+      const nextLabel = (next?.event || (next as any)?.deduction_name || (next as any)?.notes || "").toString().trim();
+      const nextDate = parseDate(nextLabel);
+      const nextTime = parseTime(nextLabel);
+      if (!nextDate && !nextTime && nextLabel) {
+        merged.push({
+          ...curr,
+          event: nextLabel,
+          from_datetime: `${dateCurr}T${timeCurr}:00`,
+          to_datetime: `${dateCurr}T${timeCurr}:00`,
+        });
+        i += 1;
         continue;
       }
     }
@@ -204,14 +240,22 @@ function isPureDateTime(label: string): boolean {
   return tmp.length === 0;
 }
 
-function normalizeSofEvents(rawEvents: any[]): { events: SofEvent[]; summary: SofSummary } {
+function normalizeSofEvents(rawEvents: any[]): { events: SofEvent[]; summary: SofSummary; vesselCandidate?: string | null } {
   const mergedRaw = mergeTableRows(rawEvents || []);
 
   // Pre-scan for the first date token to use as a fallback context when none is found inline.
   let firstDateContext: string | null = null;
+  let vesselCandidate: string | null = null;
   for (const evRaw of mergedRaw || []) {
     const labelRaw = (evRaw?.event || (evRaw as any)?.deduction_name || (evRaw as any)?.notes || "").toString();
     const candidate = parseDate(labelRaw);
+    if (!vesselCandidate) {
+      const mv = labelRaw.match(/\b(?:mv|m\/v)\s+([A-Z0-9 ._-]{3,})/i);
+      if (mv) vesselCandidate = mv[1].trim();
+      else if (/^[A-Z0-9 ._-]{6,}$/.test(labelRaw) && labelRaw.includes(" ")) {
+        vesselCandidate = labelRaw.trim();
+      }
+    }
     if (candidate) {
       firstDateContext = candidate;
       break;
@@ -267,18 +311,74 @@ function normalizeSofEvents(rawEvents: any[]): { events: SofEvent[]; summary: So
   const summary: SofSummary = {};
   let pendingSummaryKey: "vessel_name" | "port_name" | "terminal" | "cargo_name" | "cargo_quantity" | "laycan" | null = null;
 
-  for (const evRaw of mergedRaw || []) {
+  for (let idx = 0; idx < (mergedRaw || []).length; idx += 1) {
+    const evRaw = (mergedRaw || [])[idx];
     const ev: SofEvent = { ...(evRaw as SofEvent) };
     const warnings: string[] = Array.isArray((evRaw as any).warnings) ? [...(evRaw as any).warnings] : [];
     const labelRaw = (ev.event || (evRaw as any).deduction_name || (evRaw as any).notes || "").toString();
     const label = labelRaw.replace(/\s+/g, " ").trim();
     if (label === ":") continue;
     const lower = label.toLowerCase();
-    const dateInText = parseDate(label);
-    const timeInText = parseTime(label);
+    let dateInText = parseDate(label);
+    let timeInText = parseTime(label);
 
-    if (lower.startsWith("loading port") || lower.startsWith("discharge port") || lower.startsWith("port:")) {
-      const m = label.match(/(?:loading port|discharge port|port)[:\s-]*(.+)/i);
+    // Tabular triple: date line + time line + description line
+    if (dateInText && !timeInText && idx + 2 < mergedRaw.length) {
+      const timeLine = mergedRaw[idx + 1];
+      const descLine = mergedRaw[idx + 2];
+      const timeOnly = parseTime((timeLine?.event || (timeLine as any)?.notes || "").toString());
+      const descRaw = (descLine?.event || (descLine as any)?.notes || "").toString().trim();
+      const descHasDate = parseDate(descRaw);
+      const descHasTime = parseTime(descRaw);
+      if (timeOnly && descRaw && !descHasDate && !descHasTime) {
+        const datetime = `${dateInText}T${timeOnly}:00`;
+        const mapped = mapCanonicalEvent(descRaw);
+        normalized.push({
+          ...descLine,
+          event: descRaw,
+          from_datetime: datetime,
+          to_datetime: descLine?.to_datetime || descLine?.end || datetime,
+          event_type: "instant",
+          canonical_event: mapped.canonical,
+          canonical_confidence: mapped.confidence,
+        });
+        currentDate = dateInText;
+        timelineStarted = true;
+        idx += 2;
+        continue;
+      }
+    }
+
+    // Lines that start with a time glued to text (e.g., "09:00E.O.S.P.")
+    if (!timeInText) {
+      const split = splitLeadingTime(label);
+      if (split) {
+        timeInText = split.time;
+        // replace label with the remainder for further processing
+        ev.event = split.rest;
+      }
+    }
+
+    // If date/time are present in-line, attach immediately and seed date context.
+    if (dateInText && timeInText) {
+      const dt = `${dateInText}T${timeInText}:00Z`;
+      // If this line is mostly date/time (no real description), treat it as context for the next row.
+      const lettersOnly = label.replace(/[0-9:.\\-\\/\\s]/g, "");
+      if (!ev.event || lettersOnly.length <= 3) {
+        pendingDateTime = dt;
+        currentDate = dateInText;
+        continue;
+      }
+      ev.from_datetime = ev.from_datetime || dt;
+      ev.to_datetime = ev.to_datetime || ev.end || dt;
+      currentDate = dateInText;
+      timelineStarted = true;
+    } else if (dateInText && !currentDate) {
+      currentDate = dateInText;
+    }
+
+    if (lower.startsWith("loading port") || lower.startsWith("discharge port") || lower.startsWith("port:") || lower.startsWith("port of")) {
+      const m = label.match(/(?:loading port|discharge port|port(?:\s+of)?)[\s:.-]*(.+)/i);
       if (m) summary.port_name = m[1].trim() || summary.port_name;
     }
     if (!summary.port_name) {
@@ -287,10 +387,10 @@ function normalizeSofEvents(rawEvents: any[]): { events: SofEvent[]; summary: So
     }
     // Terminal / berth / jetty
     if (!summary.terminal) {
-      const m = label.match(/(?:terminal|berth|jetty|wharf)[:\-]?\s*([A-Za-z0-9 .#\\/-]+)/i);
+      const m = label.match(/(?:terminal|berth|jetty|wharf|quay)[:\-]?\s*([A-Za-z0-9 .#\\/-]+)/i);
       if (m) summary.terminal = m[1].trim();
     }
-    if (!summary.terminal && /(berth|terminal|jetty|wharf)/i.test(label) && label.length < 120) {
+    if (!summary.terminal && /(berth|terminal|jetty|wharf|quay)/i.test(label) && label.length < 120) {
       const parts = label.trim().split(/\s+/);
       if (parts.length > 1) summary.terminal = label.trim();
     }
@@ -461,7 +561,7 @@ function normalizeSofEvents(rawEvents: any[]): { events: SofEvent[]; summary: So
     // Lines that contain both date and time: set context and also emit as an event.
     if (dateInText && timeInText) {
       currentDate = dateInText;
-      const datetime = `${dateInText}T${timeInText}:00`;
+      const datetime = `${dateInText}T${timeInText}:00Z`;
       if (!ev.from_datetime) ev.from_datetime = datetime;
       if (!ev.to_datetime) ev.to_datetime = ev.end || datetime;
       timelineStarted = true;
@@ -469,8 +569,42 @@ function normalizeSofEvents(rawEvents: any[]): { events: SofEvent[]; summary: So
 
     // Lines with only a time inherit the current date if available; otherwise warn.
     if (timeInText && !ev.from_datetime) {
-      if (currentDate) {
-        const datetime = `${currentDate}T${timeInText}:00`;
+      // If next line is a description (no date/time), merge using this time.
+      const next = mergedRaw[idx + 1];
+      const nextLabel = (next?.event || (next as any)?.deduction_name || (next as any)?.notes || "").toString().trim();
+      const nextHasDate = parseDate(nextLabel);
+      const nextHasTime = parseTime(nextLabel);
+      const nextAlpha = nextLabel.replace(/[^a-zA-Z]/g, "");
+      const nextLooksLikeDesc = nextLabel && nextAlpha.length > 2 && !nextHasDate && !nextHasTime;
+      let dateCtx = currentDate || firstDateContext;
+      if (!dateCtx) {
+        for (let j = idx - 1; j >= 0; j--) {
+          const prev = mergedRaw[j];
+          const prevLabel = (prev?.event || (prev as any)?.deduction_name || (prev as any)?.notes || "").toString();
+          const prevDate = parseDate(prevLabel);
+          if (prevDate) {
+            dateCtx = prevDate;
+            currentDate = prevDate;
+            break;
+          }
+        }
+      }
+      const datetime = dateCtx ? `${dateCtx}T${timeInText}:00Z` : null;
+
+      if (nextLooksLikeDesc && datetime) {
+        const mergedEv: SofEvent = { ...(next as any) };
+        mergedEv.event = nextLabel;
+        mergedEv.from_datetime = datetime;
+        mergedEv.to_datetime = mergedEv.to_datetime || mergedEv.end || datetime;
+        mergedEv.canonical_confidence = mergedEv.canonical_confidence ?? ev.canonical_confidence ?? null;
+        mergedEv.canonical_event = mergedEv.canonical_event ?? ev.canonical_event ?? null;
+        normalized.push(mergedEv);
+        idx += 1; // skip the next line since we consumed it
+        timelineStarted = true;
+        continue;
+      }
+
+      if (currentDate && datetime) {
         ev.from_datetime = datetime;
         ev.to_datetime = ev.to_datetime || ev.end || datetime;
         timelineStarted = true;
@@ -486,6 +620,12 @@ function normalizeSofEvents(rawEvents: any[]): { events: SofEvent[]; summary: So
     const alphaOnly = cleanedLabel.replace(/[^a-zA-Z]/g, "");
     const singleWord = cleanedLabel.split(/\s+/).filter(Boolean);
     const monthOnly = singleWord.length === 1 && /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\d{0,4}$/i.test(singleWord[0]);
+    // If this line is just a date/time, hold it for the next event row.
+    if (dateInText && timeInText && alphaOnly.length === 0) {
+      pendingDateTime = `${dateInText}T${timeInText}:00`;
+      continue;
+    }
+
     if (!cleanedLabel || cleanedLabel.length < 3 || alphaOnly.length === 0 || monthOnly || isPureDateTime(label)) {
       continue;
     }
@@ -535,7 +675,7 @@ function normalizeSofEvents(rawEvents: any[]): { events: SofEvent[]; summary: So
     }
   }
 
-  return { events: normalized, summary };
+  return { events: normalized, summary, vesselCandidate };
 }
 
 /**
@@ -544,7 +684,7 @@ function normalizeSofEvents(rawEvents: any[]): { events: SofEvent[]; summary: So
 export function normalizeSofPayload(payload: RawSofOcrResponse, opts?: { confidenceFloor?: number }): SofExtractResponse {
   const confidenceFloor = Number(opts?.confidenceFloor ?? 0.35);
   const rawEvents = Array.isArray(payload?.events) ? payload.events : [];
-  const { events: normalizedEvents, summary: extractedSummary } = normalizeSofEvents(rawEvents);
+  const { events: normalizedEvents, summary: extractedSummary, vesselCandidate } = normalizeSofEvents(rawEvents);
 
   const filtered: SofEvent[] = [];
   const filteredOut: SofEvent[] = [];
@@ -595,6 +735,18 @@ export function normalizeSofPayload(payload: RawSofOcrResponse, opts?: { confide
       const term = mergedSummary.terminal.trim();
       if (term.split(" ").length <= 1 || /^\d+$/.test(term)) {
         mergedSummary.terminal = null;
+      }
+    }
+    if (!mergedSummary.vessel_name || /^name$/i.test(mergedSummary.vessel_name)) {
+      if (!mergedSummary.vessel_name && (payload as any).events) {
+        const mvLine = (payload as any).events.find((e: any) => /\b(?:mv|m\/v)\s+[A-Z0-9 ._-]{3,}/i.test((e.event || "").toString()));
+        if (mvLine) {
+          const m = (mvLine.event as string).match(/\b(?:mv|m\/v)\s+([A-Z0-9 ._-]{3,})/i);
+          if (m) mergedSummary.vessel_name = m[1].trim();
+        }
+      }
+      if (!mergedSummary.vessel_name && vesselCandidate) {
+        mergedSummary.vessel_name = vesselCandidate;
       }
     }
   }

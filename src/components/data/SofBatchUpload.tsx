@@ -12,6 +12,7 @@ type SofResult = {
   eventsCount?: number;
   filteredCount?: number;
   raw?: any;
+  rawOcr?: any;
 };
 
 // Default to the local proxy to avoid CORS issues with the upstream OCR service.
@@ -91,6 +92,7 @@ export default function SofBatchUpload() {
         current.filteredCount = filtered.length;
         current.summary = json.summary || null;
         current.raw = json;
+        current.rawOcr = json.raw || null;
       } catch (err: any) {
         current.status = "error";
         current.message = err?.name === "AbortError" ? "Timed out (10 minutes)" : err?.message || "Failed";
@@ -124,6 +126,17 @@ export default function SofBatchUpload() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `${r.name.replace(/\\.pdf$/i, "")}-sof.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadRawOcr = (r: SofResult) => {
+    if (!r.rawOcr) return;
+    const blob = new Blob([JSON.stringify(r.rawOcr, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${r.name.replace(/\\.pdf$/i, "")}-raw-ocr.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -227,7 +240,12 @@ export default function SofBatchUpload() {
                 </span>
                 {r.raw && (
                   <Button variant="ghost" size="sm" onClick={() => downloadOne(r)}>
-                    Download
+                    Parsed
+                  </Button>
+                )}
+                {r.rawOcr && (
+                  <Button variant="ghost" size="sm" onClick={() => downloadRawOcr(r)}>
+                    Raw OCR
                   </Button>
                 )}
               </div>

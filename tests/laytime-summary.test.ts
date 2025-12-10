@@ -52,7 +52,8 @@ describe("laytime summary helper", () => {
 
     const snapshot = buildStatementSnapshot({
       claim: baseClaim,
-      events,
+      events: [], // auto deductions disabled; treat as manual entries
+      manualDeductions: events,
       manualAdditions: manualAdd,
     });
 

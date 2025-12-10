@@ -7,6 +7,9 @@
 ## Local OCR/layout tip (image-heavy PDFs)
 - For scanned/image-heavy PDFs, run a local pass with `pdf2image` at 250–300 DPI, then `pytesseract.image_to_data` (`--oem 1 --psm 6`) to retain line layout. The `parse_line_groups` helper in this doc keeps per-line bboxes/confidence so you can overlay in the UI.
 - If text is still missing, try `psm 4` (sparse text) and/or deskew with Pillow before OCR.
+- If you want a lightweight local fallback inside the Next.js app (no external OCR), use pdf.js to extract text for text-based PDFs and fall back to a tiny worker that rasterizes pages with `pdfjs-dist` + `tesseract.js` at 250–300 DPI for image-only PDFs. Keep it gated behind a flag because it’s CPU-heavy.
+  - Frontend flags: set `NEXT_PUBLIC_ENABLE_LOCAL_OCR=true` to enable local pdf.js text extraction; optionally set `NEXT_PUBLIC_ENABLE_TESSERACT_RASTER=true` to allow a tesseract.js raster pass if text is empty.
+  - Recent parser note: lines that contain both a date and time now directly set the event timestamps and date context; if the date/time is on one line and the description on the next, the rows are merged so timelines pick up times from tabular SOFs.
 
 ## `main.py`
 ```python

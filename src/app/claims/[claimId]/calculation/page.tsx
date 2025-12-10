@@ -31,6 +31,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Plus } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { SofExtractEvent, SofExtractResult } from "@/lib/sof-extractor";
+const ENABLE_LOCAL_OCR = process.env.NEXT_PUBLIC_ENABLE_LOCAL_OCR === "true";
+const ENABLE_LOCAL_RASTER = process.env.NEXT_PUBLIC_ENABLE_TESSERACT_RASTER === "true";
 import { buildStatementSnapshot } from "@/lib/laytime-summary";
 import { canonicalMappings, mapCanonicalEvent } from "@/lib/sof-mapper";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -1033,12 +1035,24 @@ function SofExtractorPanel({
         body: form,
       });
       const json = await res.json();
-      if (!res.ok) {
-        setError(json?.error || "Extraction failed");
-        onError?.(json?.error || "Extraction failed");
+      let typed = res.ok ? (json as SofExtractResult) : null;
+
+      if ((!res.ok || !typed?.events?.length) && ENABLE_LOCAL_OCR) {
+        const { localOcrFallback } = await import("@/lib/local-ocr-fallback");
+        try {
+          typed = await localOcrFallback(file, { enableRaster: ENABLE_LOCAL_RASTER });
+        } catch (err) {
+          console.error("Local OCR fallback failed", err);
+        }
+      }
+
+      if (!typed) {
+        const msg = json?.error || "Extraction failed";
+        setError(msg);
+        onError?.(msg);
         return;
       }
-      const typed = json as SofExtractResult;
+
       setResult(typed);
       onResult?.(typed);
     } catch (err: any) {

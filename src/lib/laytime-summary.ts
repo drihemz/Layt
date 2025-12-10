@@ -86,7 +86,7 @@ export function buildStatementSnapshot({
       if (claim.port_call_id) {
         return ev.port_call_id === claim.port_call_id || !ev.port_call_id;
       }
-      return !ev.port_call_id;
+      return true; // no specific port_call_id on claim -> include all
     }
     const pc = allPorts.find((p) => p.id === ev.port_call_id);
     const act = pc?.activity;
