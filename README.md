@@ -147,11 +147,16 @@ npm run dev
 
 ## SOF OCR (self-hosted)
 
-- A FastAPI + Tesseract service lives in `ocr/`. It keeps PDF processing inside your infra.
+- FastAPI + **PaddleOCR (CPU)** service lives in `ocr/`; PDFs stay in your infra. Requirements pin PaddleOCR 2.7.0 / PaddlePaddle 2.6.2 with PyMuPDF renders.
 - Quick start with Docker: `docker compose -f docker-compose.ocr.yml up --build`
 - Or run locally: `cd ocr && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000`
-- The Next.js proxy `/api/sof-extract` defaults to `http://localhost:8000/extract`. Override with `SOF_OCR_ENDPOINT` if needed. Confidence floor is controlled by `SOF_CONFIDENCE_FLOOR` (default `0.35`).
+- The Next.js proxy `/api/sof-extract` defaults to `http://localhost:8000/extract`. Override with `SOF_OCR_ENDPOINT` (current AWS test: `http://51.20.12.235:8000/extract`). Confidence floor is controlled by `SOF_CONFIDENCE_FLOOR` (default `0.35`).
 - Parser highlights: dotted/ordinal dates (e.g., `22.01.2017`, `April 22nd 2024`), default date context pre-scan, cleaner header vs timeline separation (vessel/terminal/cargo), and longer API/batch timeouts (10 minutes) to reduce aborted large scans.
+- Sample curl (replace path as needed):
+  ```bash
+  curl -X POST -F "file=@/path/to/sofs/Tailwinds - SOF - Santos.pdf" \
+    http://51.20.12.235:8000/extract
+  ```
 
 ---
 
